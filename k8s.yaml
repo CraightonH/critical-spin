@@ -1,0 +1,1293 @@
+apiVersion: v1
+data:
+  game.js: "/* Critical Spin — the build is the machine.  No framework, no server
+    state. */\n(function () {\n  'use strict';\n\n  const STORAGE_KEY = 'critical-spin-best-v1';\n\n
+    \ const SYMBOLS = {\n    sword:  { glyph: '⚔', name: 'SWORD',  color: '#ff9c51'
+    },\n    shield: { glyph: '⬟', name: 'SHIELD', color: '#7edaff' },\n    potion:
+    { glyph: '✚', name: 'POTION', color: '#ff697a' },\n    fire:   { glyph: '✹', name:
+    'FIRE',   color: '#ff8064' },\n    clover: { glyph: '♣', name: 'WILD',   color:
+    '#d7ff64' },\n    blank:  { glyph: '·', name: 'BLANK',  color: '#626b84' },\n
+    \   seven:  { glyph: '7', name: 'SEVEN',  color: '#ffd268' }\n  };\n\n  const
+    HEROES = {\n    housebreaker: {\n      id: 'housebreaker', name: 'The Housebreaker',
+    className: 'Risk runner', portrait: '♠', color: '#d7ff64',\n      short: 'Turns
+    bad odds into big swings.', maxHp: 100, baseAttack: 31, baseDefense: 8, baseHeal:
+    17,\n      trait: 'Loaded Dice — every WILD has a 20% chance to become a SEVEN.',\n
+    \     ability: 'House Edge', abilityIcon: '♜', abilityHint: 'Load a guaranteed
+    triple 7',\n      weights: { sword: 28, shield: 15, potion: 11, fire: 7, clover:
+    14, blank: 19, seven: 6 }\n    },\n    ironsaint: {\n      id: 'ironsaint', name:
+    'The Iron Saint', className: 'Table guardian', portrait: '♜', color: '#7edaff',\n
+    \     short: 'Makes the machine pay in shields.', maxHp: 136, baseAttack: 23,
+    baseDefense: 17, baseHeal: 13,\n      trait: 'House Insurance — SHIELD blocks
+    20% extra damage and charges ability faster.',\n      ability: 'Double Down',
+    abilityIcon: '⬟', abilityHint: 'Bank a fortress of block + healing',\n      weights:
+    { sword: 19, shield: 29, potion: 11, fire: 5, clover: 10, blank: 18, seven: 8
+    }\n    },\n    emberjoker: {\n      id: 'emberjoker', name: 'The Ember Joker',
+    className: 'Volatile caster', portrait: '✹', color: '#ff9c51',\n      short: 'Sets
+    the felt on fire for fun.', maxHp: 93, baseAttack: 29, baseDefense: 6, baseHeal:
+    14,\n      trait: 'Hot Streak — three FIREs ignite the target for 18 damage each
+    round.',\n      ability: 'Wild Card', abilityIcon: '✦', abilityHint: 'Make the
+    next pull burn brighter',\n      weights: { sword: 18, shield: 13, potion: 10,
+    fire: 28, clover: 17, blank: 18, seven: 6 }\n    }\n  };\n\n  const ENCOUNTERS
+    = [\n    { name: 'The Velvet Rat', flavor: 'A small-time cheat with a very large
+    appetite.', art: '\U0001F400', level: 1, maxHp: 160, attack: 14, reward: 35, drop:
+    'CLOVER DUST', mood: 'WATCHFUL' },\n    { name: 'Neon Pit Boss', flavor: 'His
+    smile is bright. His knuckles are brighter.', art: '\U0001F0CF', level: 2, maxHp:
+    275, attack: 22, reward: 65, drop: 'GLOWING CHIP', mood: 'SMILING' },\n    { name:
+    'The Debt Collector', flavor: 'He always finds the one bet you forgot to hedge.',
+    art: '\U0001F480', level: 3, maxHp: 430, attack: 29, reward: 105, drop: 'BLACK
+    LEDGER', mood: 'DUE NOW' },\n    { name: 'THE HOUSE', flavor: 'Every wager ends
+    here. Make the odds regret you.', art: '♛', level: 7, maxHp: 900, attack: 39,
+    reward: 250, drop: 'THE CROWN', mood: 'THE FINAL TABLE', boss: true }\n  ];\n\n
+    \ const UPGRADE_POOL = [\n    { id: 'seven', icon: '7', title: 'Loaded Chamber',
+    text: '+3% SEVEN weight. The jackpot gets closer.', cost: 'REEL +3%', apply(s)
+    { s.upgrades.seven += 3; } },\n    { id: 'attack', icon: '⚔', title: 'Sharper
+    Edges', text: '+6 base weapon damage on every pull.', cost: 'DMG +6', apply(s)
+    { s.upgrades.attack += 6; } },\n    { id: 'health', icon: '♥', title: 'Second
+    Wind', text: '+18 maximum vitality and restore 18 now.', cost: 'HP +18', apply(s)
+    { s.upgrades.maxHp += 18; s.playerHp += 18; } },\n    { id: 'defense', icon: '⬟',
+    title: 'Felt-Plated', text: '+5 defense. The house hates a guarded table.', cost:
+    'DEF +5', apply(s) { s.upgrades.defense += 5; } },\n    { id: 'wild', icon: '♣',
+    title: 'Lucky Charm', text: '+5% WILD weight and +4% critical luck.', cost: 'WILD
+    +5%', apply(s) { s.upgrades.clover += 5; s.upgrades.luck += 4; } },\n    { id:
+    'potion', icon: '✚', title: 'House Medic', text: '+5 healing each time POTION
+    lands.', cost: 'HEAL +5', apply(s) { s.upgrades.heal += 5; } },\n    { id: 'gold',
+    icon: '$', title: 'Side Bet', text: 'Take 45 gold immediately. Spend it on nothing
+    yet.', cost: 'CASH +45g', apply(s) { s.gold += 45; } }\n  ];\n\n  const $ = (id)
+    => document.getElementById(id);\n  const heroGrid = $('heroGrid');\n  const reelsEl
+    = $('reels');\n  const logEl = $('combatLog');\n  const rewardPanel = $('rewardPanel');\n
+    \ const upgradeGrid = $('upgradeGrid');\n  const resultBanner = $('resultBanner');\n
+    \ const toast = $('toast');\n  const heroPicker = $('heroPicker');\n  let modalFocus
+    = null;\n\n  let best = loadBest();\n  let spinInterval = null;\n  let lockTimers
+    = [];\n  let resolveTimer = null;\n  let autoTimer = null;\n  let toastTimer =
+    null;\n  let holdTimer = null;\n  let holdStartedAt = 0;\n  let holdActive = false;\n
+    \ let suppressSpinClick = false;\n  const HOLD_DURATION = 2000;\n  const REEL_STOP_GAP
+    = 200;\n\n  const state = {\n    heroId: 'housebreaker', run: 1, encounterIndex:
+    0, enemy: null, phase: 'battle',\n    playerHp: 100, charge: 0, block: 0, burn:
+    0, streak: 0, spins: 0, gold: 120,\n    held: [false, false, false], reels: ['sword',
+    'shield', 'blank'], log: [], auto: false,\n    spinning: false, upgrades: { attack:
+    0, defense: 0, maxHp: 0, heal: 0, seven: 0, clover: 0, luck: 0 },\n    guaranteeSeven:
+    false, wildSurge: false, options: [], dealerChosen: false\n  };\n\n  function
+    loadBest() {\n    try {\n      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)
+    || '{}');\n      return { run: Number(saved.run) || 0, gold: Number(saved.gold)
+    || 0 };\n    } catch (error) {\n      return { run: 0, gold: 0 };\n    }\n  }\n\n
+    \ function saveBest() {\n    const cleared = state.phase === 'complete' ? ENCOUNTERS.length
+    : state.encounterIndex;\n    if (cleared > best.run || state.gold > best.gold)
+    {\n      best = { run: Math.max(best.run, cleared), gold: Math.max(best.gold,
+    state.gold) };\n      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(best));
+    } catch (error) { /* storage can be disabled */ }\n    }\n  }\n\n  function hero()
+    { return HEROES[state.heroId]; }\n  function maxHp() { return hero().maxHp + state.upgrades.maxHp;
+    }\n  function attackPower() { return hero().baseAttack + state.upgrades.attack;
+    }\n  function defensePower() { return hero().baseDefense + state.upgrades.defense;
+    }\n  function clamp(value, min, max) { return Math.min(max, Math.max(min, value));
+    }\n  function number(value) { return Math.round(value).toLocaleString(); }\n  function
+    pad(value) { return String(value).padStart(2, '0'); }\n\n  function effectiveWeights()
+    {\n    const weights = { ...hero().weights };\n    weights.seven += state.upgrades.seven;\n
+    \   weights.clover += state.upgrades.clover;\n    return weights;\n  }\n\n  function
+    rollSymbol() {\n    const weights = effectiveWeights();\n    const total = Object.values(weights).reduce((sum,
+    weight) => sum + weight, 0);\n    let pick = Math.random() * total;\n    for (const
+    key of Object.keys(weights)) {\n      pick -= weights[key];\n      if (pick <=
+    0) {\n        if (hero().id === 'housebreaker' && key === 'clover' && Math.random()
+    < 0.2) return 'seven';\n        return key;\n      }\n    }\n    return 'blank';\n
+    \ }\n\n  function addLog(message, emphasis) {\n    state.log.unshift({ message,
+    emphasis: emphasis || '' });\n    state.log = state.log.slice(0, 3);\n    renderLog();\n
+    \ }\n\n  function renderLog() {\n    logEl.textContent = '';\n    if (!state.log.length)
+    {\n      const empty = document.createElement('li');\n      empty.textContent
+    = 'The dealer is watching. Make the first move.';\n      logEl.appendChild(empty);\n
+    \     return;\n    }\n    state.log.forEach((entry, index) => {\n      const item
+    = document.createElement('li');\n      const text = document.createElement('span');\n
+    \     text.textContent = entry.message;\n      if (entry.emphasis) {\n        const
+    mark = document.createElement('b');\n        mark.textContent = ` ${entry.emphasis}`;\n
+    \       text.appendChild(mark);\n      }\n      const time = document.createElement('span');\n
+    \     time.className = 'log-time';\n      time.textContent = index === 0 ? 'NOW'
+    : `-${index} SPIN`;\n      item.append(text, time);\n      logEl.appendChild(item);\n
+    \   });\n  }\n\n  function renderHeroes() {\n    heroGrid.textContent = '';\n
+    \   Object.values(HEROES).forEach((entry) => {\n      const button = document.createElement('button');\n
+    \     button.type = 'button';\n      button.className = `hero-card${entry.id ===
+    state.heroId ? ' selected' : ''}`;\n      button.style.setProperty('--hero-color',
+    entry.color);\n      button.setAttribute('aria-pressed', String(entry.id === state.heroId));\n
+    \     button.innerHTML = `<span class=\"hero-portrait\" aria-hidden=\"true\">${entry.portrait}</span><span
+    class=\"hero-copy\"><h3>${entry.name}</h3><p>${entry.short}</p></span><span class=\"hero-tag\">${entry.className.toUpperCase()}</span>`;\n
+    \     button.addEventListener('click', () => selectHero(entry.id));\n      heroGrid.appendChild(button);\n
+    \   });\n    // Dealer selection is a first-deal/reset overlay, never a permanent
+    dashboard rail.\n    heroPicker.hidden = state.dealerChosen;\n  }\n\n  function
+    renderOdds() {\n    const weights = effectiveWeights();\n    const total = Object.values(weights).reduce((sum,
+    weight) => sum + weight, 0);\n    const list = $('oddsList');\n    list.textContent
+    = '';\n    Object.keys(SYMBOLS).forEach((key) => {\n      const symbol = SYMBOLS[key];\n
+    \     const row = document.createElement('div');\n      row.className = 'odds-row';\n
+    \     row.style.setProperty('--symbol-color', symbol.color);\n      const percent
+    = Math.round((weights[key] / total) * 100);\n      row.innerHTML = `<span class=\"odds-symbol\"
+    aria-hidden=\"true\">${symbol.glyph}</span><label>${symbol.name}</label><strong>${percent}%</strong><div
+    class=\"odds-track\" aria-hidden=\"true\"><span style=\"width:${percent}%\"></span></div>`;\n
+    \     list.appendChild(row);\n    });\n    $('reelPower').textContent = `Power
+    +${state.upgrades.attack + state.upgrades.defense}`;\n  }\n\n  function renderReels()
+    {\n    reelsEl.textContent = '';\n    state.reels.forEach((key, index) => {\n
+    \     const symbol = SYMBOLS[key];\n      const reel = document.createElement('button');\n
+    \     reel.type = 'button';\n      reel.className = `reel${state.held[index] ?
+    ' locked' : ''}`;\n      reel.dataset.index = String(index);\n      reel.style.setProperty('--symbol-color',
+    symbol.color);\n      reel.setAttribute('aria-label', `${state.held[index] ? 'Release'
+    : 'Hold'} reel ${index + 1}. Current symbol ${symbol.name}`);\n      // The faded
+    strip gives the machine a real vertical reel. The center value is\n      // still
+    the source of truth for combat, while the surrounding symbols make a\n      //
+    spin read as movement instead of a single glyph swap.\n      const stripKeys =
+    [rollSymbol(), key, rollSymbol(), rollSymbol(), key];\n      const strip = stripKeys.map((stripKey)
+    => `<span class=\"strip-symbol\" style=\"--symbol-color:${SYMBOLS[stripKey].color}\">${SYMBOLS[stripKey].glyph}</span>`).join('');\n
+    \     reel.innerHTML = `${state.held[index] ? '<span class=\"lock-badge\">HELD</span>'
+    : ''}<span class=\"reel-sparks\" aria-hidden=\"true\"><i></i><i></i><i></i><i></i><b></b></span><span
+    class=\"reel-window\"><span class=\"reel-strip\" aria-hidden=\"true\">${strip}</span><span
+    class=\"reel-value\"><span class=\"symbol-glyph\" aria-hidden=\"true\">${symbol.glyph}</span><span
+    class=\"symbol-name\">${symbol.name}</span></span></span>`;\n      reel.addEventListener('click',
+    () => toggleHold(index));\n      reelsEl.appendChild(reel);\n    });\n  }\n\n
+    \ function renderEnemy() {\n    const enemy = state.enemy;\n    if (!enemy) return;\n
+    \   $('encounterNumber').textContent = pad(state.encounterIndex + 1);\n    $('encounterType').textContent
+    = enemy.boss ? 'FINAL TABLE' : 'ANTE ROOM';\n    $('encounterTitle').textContent
+    = enemy.name;\n    $('enemyName').textContent = enemy.name;\n    $('enemyFlavor').textContent
+    = enemy.flavor;\n    const enemyArt = $('enemyArt');\n    const enemyVariant =
+    ['rat', 'joker', 'skull', 'house'][state.encounterIndex] || 'rat';\n    enemyArt.className
+    = `enemy-art enemy-art-${enemyVariant}`;\n    enemyArt.setAttribute('aria-label',
+    `${enemy.name} enemy`);\n    enemyArt.innerHTML = '<span class=\"enemy-shadow\"></span><span
+    class=\"enemy-body\"></span><span class=\"enemy-face\"></span><span class=\"enemy-accent\"></span>';\n
+    \   const enemyModalArt = $('enemyModalArt');\n    enemyModalArt.className = `enemy-modal-art
+    enemy-art-${enemyVariant}`;\n    $('enemyInfoTitle').textContent = enemy.name;\n
+    \   $('enemyInfoName').textContent = enemy.name;\n    $('enemyInfoFlavor').textContent
+    = enemy.flavor;\n    $('enemyInfoHp').textContent = `${number(Math.max(0, enemy.hp))}
+    / ${number(enemy.maxHp)}`;\n    $('enemyInfoHpBar').style.width = `${clamp((enemy.hp
+    / enemy.maxHp) * 100, 0, 100)}%`;\n    $('enemyInfoStatus').textContent = enemy.hp
+    <= 0 ? 'DEFEATED' : (state.burn ? `BURNING · ${state.burn}` : (enemy.stagger ?
+    `STAGGERED · ${enemy.stagger}` : enemy.mood));\n    $('enemyInfoReward').textContent
+    = `+${enemy.reward}g`;\n    $('enemyInfoDrop').textContent = enemy.drop;\n    $('enemyLevel').textContent
+    = `LVL ${enemy.level}`;\n    $('enemyMood').textContent = enemy.boss ? '♛' : '♠';\n
+    \   $('enemyReward').textContent = `+${enemy.reward}g`;\n    $('enemyDrop').textContent
+    = enemy.drop;\n    $('enemyHpText').textContent = `${number(Math.max(0, enemy.hp))}
+    / ${number(enemy.maxHp)}`;\n    $('enemyHpBar').style.width = `${clamp((enemy.hp
+    / enemy.maxHp) * 100, 0, 100)}%`;\n    const enemyPanel = $('enemyActor');\n    enemyPanel.classList.toggle('defeated',
+    enemy.hp <= 0);\n    $('enemyStatus').textContent = enemy.hp <= 0 ? 'DEFEATED'
+    : (state.burn ? `BURNING · ${state.burn}` : (enemy.stagger ? `STAGGERED · ${enemy.stagger}`
+    : enemy.mood));\n  }\n\n  function renderPlayer() {\n    const currentHero = hero();\n
+    \   $('runNumber').textContent = pad(state.run);\n    $('goldValue').textContent
+    = number(state.gold);\n    $('bestValue').textContent = number(best.run);\n    $('luckValue').textContent
+    = `${12 + state.upgrades.luck}%`;\n    $('playerAvatar').textContent = currentHero.portrait;\n
+    \   $('playerAvatar').style.color = currentHero.color;\n    $('playerHeading').textContent
+    = currentHero.name;\n    $('playerClass').textContent = `${currentHero.className}
+    · Level ${Math.min(9, state.encounterIndex + 1)}`;\n    const playerSprite = $('playerSprite');\n
+    \   playerSprite.className = `player-sprite hero-${currentHero.id}`;\n    playerSprite.setAttribute('aria-label',
+    `${currentHero.name} seen from behind`);\n    $('playerSceneName').textContent
+    = currentHero.name;\n    $('playerSceneClass').textContent = `${currentHero.className}
+    · Level ${Math.min(9, state.encounterIndex + 1)}`;\n    $('traitText').textContent
+    = currentHero.trait;\n    $('abilityName').textContent = currentHero.ability;\n
+    \   $('abilityIcon').textContent = currentHero.abilityIcon;\n    $('abilityHint').textContent
+    = state.guaranteeSeven ? 'LOADED · next pull is a triple 7' : (state.charge >=
+    100 ? 'READY · press SPACE' : `${currentHero.abilityHint} · ${number(state.charge)}%`);\n
+    \   $('playerHpText').textContent = `${number(Math.max(0, state.playerHp))} /
+    ${number(maxHp())}`;\n    $('playerHpBar').style.width = `${clamp((state.playerHp
+    / maxHp()) * 100, 0, 100)}%`;\n    $('chargeText').textContent = `${number(state.charge)}%`;\n
+    \   $('chargeBar').style.width = `${clamp(state.charge, 0, 100)}%`;\n    $('modalPlayerAvatar').textContent
+    = currentHero.portrait;\n    $('modalPlayerAvatar').style.color = currentHero.color;\n
+    \   $('modalPlayerName').textContent = currentHero.name;\n    $('modalPlayerClass').textContent
+    = `${currentHero.className} · Level ${Math.min(9, state.encounterIndex + 1)}`;\n
+    \   $('modalPlayerHp').textContent = `${number(Math.max(0, state.playerHp))} /
+    ${number(maxHp())}`;\n    $('modalChargeText').textContent = `${number(state.charge)}
+    / 100`;\n    $('modalChargeBar').style.width = `${clamp(state.charge, 0, 100)}%`;\n
+    \   $('modalAbilityName').textContent = currentHero.ability;\n    $('modalAbilityIcon').textContent
+    = currentHero.abilityIcon;\n    $('modalAbilityHint').textContent = state.guaranteeSeven
+    ? 'LOADED · next pull is triple 7' : (state.charge >= 100 ? 'READY · pull the
+    reels' : `${currentHero.abilityHint} · ${number(state.charge)}%`);\n    $('abilityHint').textContent
+    = state.guaranteeSeven ? 'LOADED' : `${number(state.charge)}%`;\n    $('abilityButton').disabled
+    = state.charge < 100 || state.phase !== 'battle' || state.spinning;\n    $('abilityButton').setAttribute('aria-label',
+    `Use ${currentHero.ability} skill${state.charge >= 100 ? ' (ready)' : ` (${number(state.charge)}%
+    charged)`}`);\n    $('modalAbilityButton').disabled = state.charge < 100 || state.phase
+    !== 'battle' || state.spinning;\n    // Keep ATTACK enabled while reels are resolving
+    so a two-second hold can\n    // always turn idle mode back off, even when an
+    automatic pull is underway.\n    // A tap during a spin remains a harmless no-op
+    inside spin().\n    $('spinButton').disabled = state.phase !== 'battle' || state.playerHp
+    <= 0;\n    $('abilityHintText').textContent = state.guaranteeSeven ? 'LOADED ·
+    TRIPLE 7' : (state.charge >= 100 ? 'READY TO USE' : `CHARGE ${number(state.charge)}%`);\n
+    \   $('spinButtonHint').textContent = state.phase === 'lost' ? 'THE HOUSE COLLECTS'
+    : (state.phase === 'complete' ? 'RUN CASHED OUT' : (state.spinning ? 'READING
+    THE ODDS…' : (state.auto ? 'IDLE ON · TAP TO EXIT' : 'HOLD 2s: IDLE')));\n    $('spinButton').setAttribute('aria-label',
+    state.auto ? 'Attack. Idle mode is on. Tap once to turn idle mode off.' : 'Attack.
+    Hold for 2 seconds to toggle idle mode.');\n    $('spinButton').classList.toggle('idle-active',
+    state.auto);\n    $('streakValue').textContent = number(state.streak);\n    $('streakPips').className
+    = state.streak > 0 ? 'on' : '';\n    $('spinCount').textContent = `SPINS ${state.spins}`;\n
+    \ }\n\n  function render() {\n    renderHeroes();\n    renderPlayer();\n    renderEnemy();\n
+    \   renderReels();\n    renderOdds();\n    renderLog();\n    renderRewardPanel();\n
+    \ }\n\n  function selectHero(id) {\n    if (!HEROES[id] || state.spinning || state.spins
+    > 0 || state.encounterIndex > 0) {\n      if (state.spins > 0 || state.encounterIndex
+    > 0) showToast('Dealer selection locks after the first pull.');\n      return;\n
+    \   }\n    state.heroId = id;\n    state.dealerChosen = true;\n    state.playerHp
+    = maxHp();\n    state.log = [];\n    addLog(`${HEROES[id].name} takes the table.`,
+    'NEW DEALER');\n    showResult('The table has a new dealer.', HEROES[id].trait,
+    'normal', HEROES[id].portrait);\n    render();\n    closeModal('heroPicker');\n
+    \ }\n\n  function toggleHold(index) {\n    if (state.spinning || state.phase !==
+    'battle') return;\n    state.held[index] = !state.held[index];\n    const symbol
+    = SYMBOLS[state.reels[index]];\n    addLog(`${state.held[index] ? 'Held' : 'Released'}
+    reel ${index + 1}.`, symbol.name);\n    renderReels();\n  }\n\n  function addCharge(amount)
+    {\n    state.charge = clamp(state.charge + amount, 0, 100);\n  }\n\n  function
+    setResult(title, detail, kind, icon) {\n    $('resultTitle').textContent = title;\n
+    \   $('resultDetail').textContent = detail;\n    $('resultIcon').textContent =
+    icon || '✦';\n    resultBanner.className = `result-banner ${kind || ''}`;\n  }\n\n
+    \ function showResult(title, detail, kind, icon) {\n    setResult(title, detail,
+    kind, icon);\n  }\n\n  function chooseWildTarget(results) {\n    const counts
+    = { sword: 0, fire: 0, shield: 0, potion: 0 };\n    results.forEach((key) => {
+    if (counts[key] !== undefined) counts[key] += 1; });\n    const order = ['sword',
+    'fire', 'shield', 'potion'];\n    return order.sort((a, b) => counts[b] - counts[a])[0];\n
+    \ }\n\n  function hasCombo(results) {\n    const active = results.filter((key)
+    => key !== 'blank');\n    if (active.length !== 3) return false;\n    const nonWild
+    = active.filter((key) => key !== 'clover');\n    return nonWild.length === 0 ||
+    nonWild.every((key) => key === nonWild[0]);\n  }\n\n  function formatSymbols(results)
+    {\n    return results.map((key) => SYMBOLS[key].name).join(' · ');\n  }\n\n  function
+    spin() {\n    if (state.spinning || state.phase !== 'battle' || state.playerHp
+    <= 0) return;\n    state.spinning = true;\n    const reelNodes = [...reelsEl.querySelectorAll('.reel')];\n
+    \   const activeIndexes = state.held.map((held, index) => held ? -1 : index).filter((index)
+    => index >= 0);\n    const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion:
+    reduce)').matches;\n    const finalResults = state.reels.map((key, index) => state.held[index]
+    ? key : rollSymbol());\n    if (state.guaranteeSeven) {\n      // House Edge overrides
+    held drums too: a guaranteed jackpot must still\n      // resolve as 7-7-7 regardless
+    of the player's current hold pattern.\n      finalResults.fill('seven');\n      state.guaranteeSeven
+    = false;\n    }\n    if (state.wildSurge) {\n      finalResults.forEach((key,
+    index) => {\n        if (!state.held[index] && key === 'blank') finalResults[index]
+    = 'fire';\n      });\n      state.wildSurge = false;\n    }\n    reelNodes.forEach((node,
+    index) => {\n      if (!state.held[index]) {\n        node.classList.remove('locking',
+    'locked-in');\n        node.classList.add('spinning');\n      }\n    });\n    renderPlayer();\n
+    \   clearSpinTimers();\n    let lockedCount = 0;\n    const lockedIndexes = new
+    Set();\n    spinInterval = window.setInterval(() => {\n      // A locked drum
+    is now a source-of-truth visual: only the still-moving\n      // drums may receive
+    ticker updates, so later locks never reroll earlier\n      // visible results.\n
+    \     activeIndexes.forEach((index) => {\n        if (!lockedIndexes.has(index))
+    updateReelVisual(index, rollSymbol());\n      });\n    }, reduced ? 12 : 38);\n\n
+    \   const baseDuration = reduced ? 18 : 1280;\n    activeIndexes.forEach((index,
+    order) => {\n      lockTimers.push(window.setTimeout(() => {\n        if (!state.spinning)
+    return;\n        if (lockedIndexes.has(index)) return;\n        lockedIndexes.add(index);\n
+    \       state.reels[index] = finalResults[index];\n        updateReelVisual(index,
+    finalResults[index]);\n        const node = reelsEl.querySelector(`[data-index=\"${index}\"]`);\n
+    \       if (node) {\n          node.classList.remove('spinning');\n          node.classList.remove('locking',
+    'locked-in');\n          void node.offsetWidth;\n          node.classList.add('locking',
+    'locked-in');\n          triggerReelLock(node);\n        }\n        lockedCount
+    += 1;\n        if (lockedCount === activeIndexes.length) finishSpin(finalResults);\n
+    \     }, baseDuration + (order * (reduced ? 16 : REEL_STOP_GAP))));\n    });\n\n
+    \   // With every drum held there is no animation to wait for; resolve immediately.\n
+    \   if (!activeIndexes.length) finishSpin(finalResults);\n  }\n\n  function updateReelVisual(index,
+    key) {\n    const node = reelsEl.querySelector(`[data-index=\"${index}\"]`);\n
+    \   if (!node || !SYMBOLS[key]) return;\n    const symbol = SYMBOLS[key];\n    node.style.setProperty('--symbol-color',
+    symbol.color);\n    const glyph = node.querySelector('.symbol-glyph');\n    const
+    name = node.querySelector('.symbol-name');\n    if (glyph) glyph.textContent =
+    symbol.glyph;\n    if (name) name.textContent = symbol.name;\n  }\n\n  function
+    triggerReelLock(node) {\n    const sparks = node.querySelector('.reel-sparks');\n
+    \   if (!sparks) return;\n    sparks.classList.remove('burst');\n    void sparks.offsetWidth;\n
+    \   sparks.classList.add('burst');\n  }\n\n  function finishSpin(finalResults)
+    {\n    if (!state.spinning) return;\n    if (spinInterval) window.clearInterval(spinInterval);\n
+    \   spinInterval = null;\n    lockTimers.forEach((timer) => window.clearTimeout(timer));\n
+    \   lockTimers = [];\n    state.reels = finalResults.slice();\n    // Keep the
+    lock snap visible for a beat before combat reacts to the final drum.\n    resolveTimer
+    = window.setTimeout(() => {\n      if (!state.spinning) return;\n      resolveTimer
+    = null;\n      state.spinning = false;\n      renderReels();\n      resolvePull(finalResults.slice());\n
+    \   }, window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ? 0 : 300);\n  }\n\n  function clearSpinTimers() {\n    if (spinInterval) window.clearInterval(spinInterval);\n
+    \   spinInterval = null;\n    lockTimers.forEach((timer) => window.clearTimeout(timer));\n
+    \   lockTimers = [];\n    if (resolveTimer) window.clearTimeout(resolveTimer);\n
+    \   resolveTimer = null;\n  }\n\n  function resolvePull(results) {\n    state.spins
+    += 1;\n    const enemy = state.enemy;\n    const currentHero = hero();\n    const
+    wilds = results.filter((key) => key === 'clover').length;\n    const sevens =
+    results.filter((key) => key === 'seven').length;\n    const combo = hasCombo(results);\n
+    \   let damage = 0;\n    let healing = 0;\n    let block = 0;\n    let detail
+    = formatSymbols(results);\n    let title = 'A quiet pull.';\n    let resultKind
+    = 'normal';\n    let icon = '·';\n\n    if (state.burn && enemy.hp > 0) {\n      const
+    burnDamage = 18;\n      enemy.hp -= burnDamage;\n      state.burn -= 1;\n      addLog(`The
+    burn ticks for ${burnDamage} damage.`, 'EMBER');\n      spawnFeedback(`EMBER ·
+    -${number(burnDamage)}`, 'damage');\n    }\n\n    if (sevens === 3) {\n      const
+    ratio = enemy.boss ? 0.30 : 0.80;\n      damage = Math.max(1, Math.ceil(enemy.maxHp
+    * ratio));\n      enemy.hp -= damage;\n      state.streak += 2;\n      addCharge(enemy.boss
+    ? 65 : 55);\n      title = enemy.boss ? 'THE HOUSE BLINKS.' : 'TRIPLE 7 — JACKPOT!';\n
+    \     detail = `${number(damage)} damage · ${enemy.boss ? '30% max HP + 2-turn
+    stagger' : '80% max HP erased'} · ${formatSymbols(results)}`;\n      resultKind
+    = 'jackpot';\n      icon = '7';\n      if (enemy.boss) enemy.stagger = 2;\n      const
+    stage = $('reelStage');\n      stage.classList.remove('jackpot');\n      void
+    stage.offsetWidth;\n      stage.classList.add('jackpot');\n      addLog(`${title}
+    dealt ${number(damage)} damage.`, 'JACKPOT');\n    } else {\n      const target
+    = chooseWildTarget(results);\n      const swordCount = results.filter((key) =>
+    key === 'sword').length + (target === 'sword' ? wilds : 0);\n      const fireCount
+    = results.filter((key) => key === 'fire').length + (target === 'fire' ? wilds
+    : 0);\n      const shieldCount = results.filter((key) => key === 'shield').length
+    + (target === 'shield' ? wilds : 0);\n      const potionCount = results.filter((key)
+    => key === 'potion').length + (target === 'potion' ? wilds : 0);\n      const
+    cloverOnly = results.every((key) => key === 'clover' || key === 'blank');\n\n
+    \     if (swordCount) damage += swordCount * attackPower();\n      if (fireCount)
+    damage += Math.round(fireCount * attackPower() * .72);\n      if (combo) damage
+    = Math.round(damage * 1.65) || Math.round(attackPower() * 1.25);\n      if (damage)
+    {\n        const critical = Math.random() < ((12 + state.upgrades.luck) / 100);\n
+    \       if (critical) damage = Math.round(damage * 1.75);\n        enemy.hp -=
+    damage;\n        state.streak += combo ? 2 : 1;\n        addCharge(10 + damage
+    / 18);\n        title = critical ? 'CRITICAL HIT!' : (combo ? `THREE ${SYMBOLS[results.find((key)
+    => key !== 'clover')]?.name || 'WILDS'} — COMBO!` : (fireCount && swordCount ?
+    'STEEL & FLAME.' : 'Clean hit.'));\n        detail = `${number(damage)} damage${critical
+    ? ' · 1.75× critical' : ''} · ${detail}`;\n        resultKind = fireCount ? 'hot'
+    : 'normal';\n        icon = fireCount ? '✹' : '⚔';\n        addLog(`${title} for
+    ${number(damage)} damage.`, combo ? 'COMBO' : 'HIT');\n      }\n      if (shieldCount)
+    {\n        block = shieldCount * defensePower();\n        if (currentHero.id ===
+    'ironsaint') block = Math.round(block * 1.2);\n        if (combo) block = Math.round(block
+    * 1.4);\n        state.block += block;\n        addCharge(currentHero.id === 'ironsaint'
+    ? 20 : 12);\n        title = title === 'A quiet pull.' ? 'Fortify.' : `${title}
+    + guard.`;\n        detail += ` · ${number(block)} shield banked`;\n        icon
+    = '⬟';\n        addLog(`Banked ${number(block)} shield for the counter-hit.`,
+    'GUARD');\n      }\n      if (potionCount) {\n        healing = potionCount *
+    (currentHero.baseHeal + state.upgrades.heal);\n        if (combo) healing = Math.round(healing
+    * 1.4);\n        const before = state.playerHp;\n        state.playerHp = clamp(state.playerHp
+    + healing, 0, maxHp());\n        healing = state.playerHp - before;\n        addCharge(12);\n
+    \       title = title === 'A quiet pull.' ? 'A sip between swings.' : `${title}
+    + mend.`;\n        detail += ` · restored ${number(healing)} vitality`;\n        resultKind
+    = 'heal';\n        icon = '✚';\n        addLog(`Recovered ${number(healing)} vitality.`,
+    'MEND');\n      }\n      if (fireCount >= 2) {\n        state.burn = Math.max(state.burn,
+    fireCount === 3 ? 3 : 2);\n        detail += ` · target burning for ${state.burn}
+    rounds`;\n      }\n      if (wilds && !damage && !block && !healing) {\n        const
+    luck = 4 + state.upgrades.luck;\n        addCharge(8);\n        state.streak +=
+    1;\n        title = cloverOnly && combo ? 'CLOVER CLOVER CLOVER!' : 'A lucky brush.';\n
+    \       detail = `+${luck}% critical luck for this run · ${detail}`;\n        icon
+    = '♣';\n        addLog('The WILD tilts the odds.', 'LUCK');\n      }\n      if
+    (!damage && !block && !healing && !wilds) {\n        state.streak = 0;\n        title
+    = sevens === 2 ? 'TWO SEVENS. SO CLOSE.' : 'The felt goes cold.';\n        detail
+    = sevens === 2 ? `+${number(8)}% charge · ${detail}` : `No effect · ${detail}`;\n
+    \       addCharge(sevens === 2 ? 8 : 3);\n        icon = sevens === 2 ? '7' :
+    '·';\n        addLog(title, sevens === 2 ? 'NEAR MISS' : 'BLANK');\n      }\n
+    \     if (sevens === 1 && damage) {\n        damage += Math.round(enemy.maxHp
+    * .03);\n        enemy.hp -= Math.round(enemy.maxHp * .03);\n        detail +=
+    ` · lucky 7 bonus`; \n      }\n    }\n\n    enemy.hp = Math.max(0, enemy.hp);\n
+    \   state.charge = clamp(state.charge, 0, 100);\n    if (damage) spawnFeedback(sevens
+    === 3 ? `JACKPOT · -${number(damage)}` : `-${number(damage)}`, sevens === 3 ?
+    'jackpot' : 'damage');\n    if (healing) spawnFeedback(`+${number(healing)}`,
+    'heal');\n    if (block) spawnFeedback(`⬟ ${number(block)}`, 'block');\n    if
+    (!damage && !healing && !block) spawnFeedback(sevens === 2 ? 'SO CLOSE' : 'MISS',
+    sevens === 2 ? 'jackpot' : 'damage');\n    showResult(title, detail, resultKind,
+    icon);\n    if (enemy.hp <= 0) {\n      finishEncounter();\n      return;\n    }\n
+    \   enemyAttack();\n    render();\n    saveBest();\n    scheduleAuto();\n  }\n\n
+    \ function enemyAttack() {\n    const enemy = state.enemy;\n    if (!enemy ||
+    enemy.hp <= 0) return;\n    if (enemy.stagger > 0) {\n      enemy.stagger -= 1;\n
+    \     addLog(`${enemy.name} is staggered and misses the counter-hit.`, 'STAGGER');\n
+    \     return;\n    }\n    const incoming = enemy.attack + Math.floor(Math.random()
+    * 7);\n    const blocked = Math.min(state.block, incoming);\n    const damage
+    = Math.max(0, incoming - state.block);\n    state.block = 0;\n    state.playerHp
+    = Math.max(0, state.playerHp - damage);\n    if (damage) spawnFeedback(`-${number(damage)}`,
+    'enemy-hit');\n    else if (blocked) spawnFeedback(`BLOCK · ${number(blocked)}`,
+    'block');\n    if (blocked) addLog(`Counter-hit absorbed ${number(blocked)} damage.`,
+    damage ? 'BLOCK' : 'PERFECT BLOCK');\n    if (damage) addLog(`${enemy.name} hits
+    for ${number(damage)}.`, 'OUCH');\n    if (state.playerHp <= 0) {\n      state.phase
+    = 'lost';\n      state.auto = false;\n      clearAuto();\n      showResult('THE
+    HOUSE COLLECTS.', `Your run ends at encounter ${pad(state.encounterIndex + 1)}.
+    Reset the table and try a new dealer.`, 'hot', '×');\n      addLog('Your chips
+    are gone. The house wins this hand.', 'BUST');\n    }\n  }\n\n  function finishEncounter()
+    {\n    const enemy = state.enemy;\n    state.gold += enemy.reward;\n    state.encounterIndex
+    += 1;\n    state.streak += 1;\n    saveBest();\n    if (enemy.boss) {\n      state.phase
+    = 'complete';\n      state.auto = false;\n      clearAuto();\n      showResult('YOU
+    BEAT THE HOUSE.', `The crown is yours. ${number(enemy.reward)} gold cashed out
+    from the final table.`, 'jackpot', '♛');\n      addLog('The final table pays the
+    full jackpot.', 'RUN COMPLETE');\n      state.options = [\n        { id: 'cash',
+    icon: '$', title: 'Cash Out', text: `Bank your ${number(state.gold)} gold and
+    celebrate the run.`, cost: `RUN ${state.encounterIndex}/4`, apply() { showToast('Run
+    banked. Reset when you want another table.'); } },\n        { id: 'again', icon:
+    '↻', title: 'Run It Back', text: 'Deal a fresh run with your best score intact.',
+    cost: 'NEW RUN', apply() { startNewRun(); } }\n      ];\n    } else {\n      state.phase
+    = 'reward';\n      state.options = buildUpgradeOptions();\n      showResult(`${enemy.name.toUpperCase()}
+    FOLDS.`, `You collect ${enemy.reward} gold and tune the reels before the next
+    encounter.`, 'jackpot', '✓');\n      addLog(`${enemy.name} defeated. Choose an
+    upgrade.`, 'PAYOUT');\n    }\n    render();\n    openModal('rewardPanel');\n  }\n\n
+    \ function buildUpgradeOptions() {\n    const pool = UPGRADE_POOL.filter((item)
+    => !(item.id === 'seven' && state.upgrades.seven >= 9));\n    const start = (state.encounterIndex
+    + state.upgrades.attack + state.upgrades.clover) % pool.length;\n    const options
+    = [];\n    for (let i = 0; options.length < 3 && i < pool.length * 2; i += 1)
+    {\n      const candidate = pool[(start + i) % pool.length];\n      if (!options.some((item)
+    => item.id === candidate.id)) options.push(candidate);\n    }\n    return options;\n
+    \ }\n\n  function renderRewardPanel() {\n    const isVisible = state.phase ===
+    'reward' || state.phase === 'complete';\n    rewardPanel.classList.toggle('hidden',
+    !isVisible);\n    rewardPanel.hidden = !isVisible;\n    if (!isVisible) return;\n
+    \   $('rewardHeading').textContent = state.phase === 'complete' ? 'You beat the
+    house.' : 'Choose your next advantage.';\n    $('rewardFlavor').textContent =
+    state.phase === 'complete' ? `Four tables. One crown. Final purse: ${number(state.gold)}
+    gold.` : 'The room gets meaner. So should your machine.';\n    upgradeGrid.textContent
+    = '';\n    state.options.forEach((option) => {\n      const button = document.createElement('button');\n
+    \     button.type = 'button';\n      button.className = 'upgrade-card';\n      button.innerHTML
+    = `<span class=\"upgrade-icon\" aria-hidden=\"true\">${option.icon}</span><span
+    class=\"upgrade-cost\">${option.cost}</span><h3>${option.title}</h3><p>${option.text}</p>`;\n
+    \     button.addEventListener('click', () => chooseUpgrade(option));\n      upgradeGrid.appendChild(button);\n
+    \   });\n  }\n\n  function chooseUpgrade(option) {\n    if (state.phase === 'complete')
+    {\n      option.apply(state);\n      if (option.id === 'cash') render();\n      return;\n
+    \   }\n    option.apply(state);\n    state.playerHp = clamp(state.playerHp, 1,
+    maxHp());\n    showToast(`${option.title} added to the machine.`);\n    addLog(`${option.title}
+    installed between encounters.`, 'UPGRADE');\n    startEncounter(state.encounterIndex);\n
+    \ }\n\n  function useAbility() {\n    if (state.phase !== 'battle' || state.spinning
+    || state.charge < 100) return;\n    const currentHero = hero();\n    state.charge
+    = 0;\n    if (currentHero.id === 'housebreaker') {\n      state.guaranteeSeven
+    = true;\n      showResult('HOUSE EDGE LOADED.', 'Your next pull is a guaranteed
+    triple 7. Make it count.', 'jackpot', '♜');\n      addLog('House Edge loads the
+    next pull.', 'READY');\n    } else if (currentHero.id === 'ironsaint') {\n      const
+    guard = 42 + defensePower();\n      state.block += guard;\n      const heal =
+    18;\n      state.playerHp = clamp(state.playerHp + heal, 0, maxHp());\n      showResult('DOUBLE
+    DOWN.', `Banked ${guard} shield and restored ${heal} vitality.`, 'heal', '⬟');\n
+    \     addLog(`Double Down banks ${guard} shield.`, 'FORTIFY');\n    } else {\n
+    \     state.wildSurge = true;\n      addCharge(0);\n      showResult('WILD CARD.',
+    'Blanks on your next pull burst into FIRE instead.', 'hot', '✦');\n      addLog('Wild
+    Card primes the next pull.', 'BURN');\n    }\n    renderPlayer();\n  }\n\n  function
+    startEncounter(index) {\n    const template = ENCOUNTERS[index];\n    if (!template)
+    return;\n    state.encounterIndex = index;\n    state.enemy = { ...template, hp:
+    template.maxHp, stagger: 0 };\n    state.phase = 'battle';\n    state.playerHp
+    = clamp(state.playerHp + Math.ceil(maxHp() * .12), 1, maxHp());\n    state.block
+    = 0;\n    state.burn = 0;\n    state.held = [false, false, false];\n    state.reels
+    = ['sword', 'shield', 'blank'];\n    showResult(`TABLE ${pad(index + 1)} DEALT.`,
+    template.boss ? 'The final table is open. Find the triple 7.' : 'Tune your holds
+    and pull for an opening hit.', 'normal', template.boss ? '♛' : '♠');\n    render();\n
+    \   window.scrollTo({ top: 0, behavior: 'smooth' });\n    scheduleAuto();\n  }\n\n
+    \ function startNewRun() {\n    clearAuto();\n    clearHoldInteraction();\n    clearSpinTimers();\n
+    \   state.run += 1;\n    state.encounterIndex = 0;\n    state.enemy = null;\n
+    \   state.phase = 'battle';\n    state.playerHp = maxHp();\n    state.charge =
+    0;\n    state.block = 0;\n    state.burn = 0;\n    state.streak = 0;\n    state.spins
+    = 0;\n    state.gold = 120;\n    state.upgrades = { attack: 0, defense: 0, maxHp:
+    0, heal: 0, seven: 0, clover: 0, luck: 0 };\n    state.playerHp = maxHp();\n    state.auto
+    = false;\n    state.held = [false, false, false];\n    state.reels = ['sword',
+    'shield', 'blank'];\n    state.spinning = false;\n    state.guaranteeSeven = false;\n
+    \   state.wildSurge = false;\n    state.log = [];\n    state.options = [];\n    state.dealerChosen
+    = false;\n    state.enemy = { ...ENCOUNTERS[0], hp: ENCOUNTERS[0].maxHp, stagger:
+    0 };\n    addLog('A fresh table opens. Pick your dealer.', 'NEW RUN');\n    showResult('THE
+    TABLE IS YOURS.', 'Pick a dealer, hold a reel, and pull the odds in your favor.',
+    'normal', '✦');\n    render();\n    openModal('heroPicker');\n  }\n\n  function
+    clearAuto() {\n    if (autoTimer) window.clearTimeout(autoTimer);\n    autoTimer
+    = null;\n  }\n\n  function scheduleAuto() {\n    clearAuto();\n    if (!state.auto
+    || state.phase !== 'battle') return;\n    autoTimer = window.setTimeout(() =>
+    {\n      if (state.auto && state.phase === 'battle' && !state.spinning) spin();\n
+    \     scheduleAuto();\n    }, 2100);\n  }\n\n  function toggleAuto() {\n    state.auto
+    = !state.auto;\n    if (state.auto) {\n      showToast('Idle mode on — the machine
+    will spin every 2.1 seconds.');\n      scheduleAuto();\n    } else {\n      clearAuto();\n
+    \     showToast('Idle mode paused.');\n    }\n    renderPlayer();\n  }\n\n  function
+    setHoldProgress(progress) {\n    const button = $('spinButton');\n    if (!button)
+    return;\n    const percent = clamp(progress, 0, 1) * 100;\n    button.style.setProperty('--hold-progress',
+    `${percent}%`);\n    button.dataset.holdPercent = `${Math.round(percent)}%`;\n
+    \   button.classList.toggle('holding', progress > 0);\n  }\n\n  function clearHoldInteraction()
+    {\n    if (holdTimer) window.clearInterval(holdTimer);\n    holdTimer = null;\n
+    \   holdActive = false;\n    holdStartedAt = 0;\n    setHoldProgress(0);\n  }\n\n
+    \ function beginAttackHold(event) {\n    if (event.pointerType === 'mouse' &&
+    event.button !== 0) return;\n    if ($('spinButton').disabled || anyModalOpen())
+    return;\n    // Idle mode is deliberately a single tap target. Do not start another\n
+    \   // hold timer (or trigger an attack) while the user is turning it off.\n    if
+    (state.auto) {\n      clearHoldInteraction();\n      suppressSpinClick = false;\n
+    \     return;\n    }\n    clearHoldInteraction();\n    holdActive = true;\n    holdStartedAt
+    = performance.now();\n    suppressSpinClick = true;\n    setHoldProgress(0.01);\n
+    \   try { event.currentTarget.setPointerCapture(event.pointerId); } catch (error)
+    { /* capture is optional */ }\n    holdTimer = window.setInterval(() => {\n      if
+    (!holdActive) return;\n      const progress = clamp((performance.now() - holdStartedAt)
+    / HOLD_DURATION, 0, 1);\n      setHoldProgress(progress);\n      if (progress
+    >= 1) {\n        holdActive = false;\n        window.clearInterval(holdTimer);\n
+    \       holdTimer = null;\n        setHoldProgress(1);\n        toggleAuto();\n
+    \     }\n    }, 16);\n  }\n\n  function endAttackHold(event) {\n    if (!holdActive)
+    {\n      if (holdStartedAt) clearHoldInteraction();\n      suppressSpinClick =
+    true;\n      return;\n    }\n    const elapsed = performance.now() - holdStartedAt;\n
+    \   clearHoldInteraction();\n    suppressSpinClick = true;\n    if (elapsed <
+    HOLD_DURATION) spin();\n    try { event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch (error) { /* capture is optional */ }\n  }\n\n  function cancelAttackHold()
+    {\n    if (!holdActive && !holdTimer && !holdStartedAt) return;\n    clearHoldInteraction();\n
+    \   suppressSpinClick = true;\n  }\n\n  function showToast(message) {\n    toast.textContent
+    = message;\n    toast.classList.add('show');\n    if (toastTimer) window.clearTimeout(toastTimer);\n
+    \   toastTimer = window.setTimeout(() => toast.classList.remove('show'), 2600);\n
+    \ }\n\n  function spawnFeedback(message, kind) {\n    const layer = $('battleFeedback');\n
+    \   if (!layer || !message) return;\n    const pop = document.createElement('span');\n
+    \   pop.className = `feedback-pop ${kind || ''}`;\n    pop.textContent = message;\n
+    \   layer.appendChild(pop);\n    window.setTimeout(() => pop.remove(), 1250);\n
+    \ }\n\n  function isModalVisible(modal) {\n    return modal && !modal.hidden &&
+    !modal.classList.contains('hidden');\n  }\n\n  function anyModalOpen() {\n    return
+    [heroPicker, $('characterInfoModal'), $('enemyInfoModal'), $('oddsModal'), $('logModal'),
+    rewardPanel].some(isModalVisible);\n  }\n\n  function openModal(id) {\n    const
+    modal = $(id);\n    if (!modal || (id === 'rewardPanel' && state.phase !== 'reward'
+    && state.phase !== 'complete')) return;\n    modalFocus = document.activeElement;\n
+    \   modal.hidden = false;\n    modal.classList.remove('hidden');\n    const first
+    = modal.querySelector('button:not([disabled])');\n    if (first) window.setTimeout(()
+    => first.focus(), 0);\n  }\n\n  function closeModal(id) {\n    const modal = $(id);\n
+    \   if (!modal || id === 'rewardPanel') return;\n    if (id === 'heroPicker' &&
+    !state.dealerChosen) state.dealerChosen = true;\n    modal.hidden = true;\n    modal.classList.add('hidden');\n
+    \   if (modalFocus && typeof modalFocus.focus === 'function') modalFocus.focus();\n
+    \   modalFocus = null;\n  }\n\n  $('abilityButton').addEventListener('click',
+    useAbility);\n  $('modalAbilityButton').addEventListener('click', useAbility);\n
+    \ $('spinButton').addEventListener('pointerdown', beginAttackHold);\n  $('spinButton').addEventListener('pointerup',
+    endAttackHold);\n  $('spinButton').addEventListener('pointercancel', cancelAttackHold);\n
+    \ $('spinButton').addEventListener('pointerleave', cancelAttackHold);\n  $('spinButton').addEventListener('click',
+    (event) => {\n    if (state.auto) {\n      clearHoldInteraction();\n      suppressSpinClick
+    = false;\n      toggleAuto();\n      return;\n    }\n    if (suppressSpinClick)
+    {\n      suppressSpinClick = false;\n      return;\n    }\n    // Keyboard activation
+    produces a click without pointer events.\n    if (event.detail === 0) spin();\n
+    \ });\n  $('characterInfoButton').addEventListener('click', () => openModal('characterInfoModal'));\n
+    \ $('oddsButton').addEventListener('click', () => openModal('oddsModal'));\n  $('logButton').addEventListener('click',
+    () => openModal('logModal'));\n  $('enemyActor').addEventListener('click', ()
+    => openModal('enemyInfoModal'));\n  $('enemyActor').addEventListener('keydown',
+    (event) => {\n    if (event.code === 'Enter' || event.code === 'Space') {\n      event.preventDefault();\n
+    \     openModal('enemyInfoModal');\n    }\n  });\n  $('changeDealerButton').addEventListener('click',
+    () => {\n    if (state.spins > 0 || state.encounterIndex > 0) {\n      showToast('Dealer
+    selection locks after the first pull.');\n      return;\n    }\n    closeModal('characterInfoModal');\n
+    \   openModal('heroPicker');\n  });\n  document.querySelectorAll('[data-close-modal]').forEach((button)
+    => {\n    button.addEventListener('click', () => closeModal(button.dataset.closeModal));\n
+    \ });\n  document.querySelectorAll('.modal-overlay').forEach((modal) => {\n    modal.addEventListener('click',
+    (event) => {\n      if (event.target === modal && modal.id !== 'rewardPanel')
+    closeModal(modal.id);\n    });\n  });\n  $('resetButton').addEventListener('click',
+    () => {\n    if (window.confirm('Start a fresh run? Your best score will stay
+    saved.')) startNewRun();\n  });\n  document.addEventListener('keydown', (event)
+    => {\n    if (event.code === 'Escape') {\n      const open = [rewardPanel, $('logModal'),
+    $('oddsModal'), $('characterInfoModal'), $('enemyInfoModal'), heroPicker].find(isModalVisible);\n
+    \     if (open && open.id !== 'rewardPanel') { closeModal(open.id); event.preventDefault();
+    }\n      return;\n    }\n    if (anyModalOpen()) return;\n    if (event.code ===
+    'Enter' && !event.repeat && document.activeElement?.tagName !== 'BUTTON') spin();\n
+    \   if (event.code === 'Space' && !event.repeat && document.activeElement?.tagName
+    !== 'BUTTON') {\n      event.preventDefault();\n      if (state.charge >= 100)
+    useAbility(); else spin();\n    }\n  });\n\n  state.enemy = { ...ENCOUNTERS[0],
+    hp: ENCOUNTERS[0].maxHp, stagger: 0 };\n  state.playerHp = maxHp();\n  addLog('The
+    table is open. Pick a dealer.', 'ANTE UP');\n  render();\n  openModal('heroPicker');\n}());\n"
+  index.html: |
+    <!doctype html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+      <meta name="theme-color" content="#070a16">
+      <meta name="description" content="Critical Spin — a gambling RPG where your build is the machine.">
+      <title>Critical Spin · GRPG</title>
+      <link rel="stylesheet" href="styles.css">
+    </head>
+    <body>
+      <div class="noise" aria-hidden="true"></div>
+      <main class="app-shell" aria-label="Critical Spin slot machine game">
+        <header class="topbar">
+          <div class="brand-lockup">
+            <div class="brand-mark" aria-hidden="true"><span>7</span><span>♠</span><span>7</span></div>
+            <div class="brand-copy"><h1>Critical <em>Spin</em></h1><span>GRPG · TABLE <b id="encounterNumber">01</b>/04</span></div>
+          </div>
+          <div class="top-stats" aria-label="Run summary">
+            <span class="top-stat"><i>RUN</i><strong id="runNumber">01</strong></span>
+            <span class="top-stat gold"><i>GOLD</i><strong id="goldValue">120</strong></span>
+            <button class="icon-button" id="resetButton" type="button" aria-label="Start a fresh run" title="New run">↻</button>
+          </div>
+        </header>
+
+        <section class="game-cabinet" aria-label="Slot machine game cabinet">
+          <section class="game-stage" aria-label="Battle scene">
+            <section class="scene-viewport" id="sceneViewport" aria-labelledby="encounterTitle">
+              <div class="scene-backdrop" aria-hidden="true">
+                <div class="moon"></div><div class="mountain mountain-back"></div><div class="mountain mountain-front"></div>
+                <div class="casino-arch arch-left"><span></span></div><div class="casino-arch arch-right"><span></span></div><div class="horizon-glow"></div>
+                <div class="battle-lane"><i></i><i></i><i></i></div>
+                <div class="floating-chip chip-one">7</div><div class="floating-chip chip-two">♣</div><div class="floating-chip chip-three">♦</div>
+              </div>
+
+              <div class="scene-ui scene-ui-top">
+                <div class="enemy-hud" aria-label="Enemy status">
+                  <div class="enemy-hud-heading"><span class="scene-level" id="enemyLevel">LVL 1</span><h2 id="enemyName">The Velvet Rat</h2><span class="enemy-status" id="enemyStatus">WATCHFUL</span></div>
+                  <div class="meter enemy-meter" aria-label="Enemy vitality"><span id="enemyHpBar"></span></div>
+                  <span class="hud-value" id="enemyHpText">160 / 160</span>
+                </div>
+                <div class="scene-actions"><span class="round-chip" id="enemyMood" aria-label="Enemy mood">♠</span></div>
+              </div>
+              <nav class="quick-actions" aria-label="Game information">
+                <button class="quick-button" id="characterInfoButton" type="button" aria-haspopup="dialog" aria-controls="characterInfoModal" aria-label="Open dealer information" title="Dealer information"><span class="quick-icon" id="playerAvatar" aria-hidden="true">♠</span><span class="sr-only">Dealer</span></button>
+                <button class="quick-button" id="oddsButton" type="button" aria-haspopup="dialog" aria-controls="oddsModal" aria-label="Open loaded odds" title="Loaded odds"><span class="quick-icon" aria-hidden="true">♣</span><span class="sr-only">Odds</span></button>
+                <button class="quick-button" id="logButton" type="button" aria-haspopup="dialog" aria-controls="logModal" aria-label="Open pull history" title="Pull history"><span class="quick-icon" aria-hidden="true">≋</span><span class="sr-only">History</span></button>
+              </nav>
+              <span class="sr-only" id="encounterTitle">The Velvet Rat</span><span class="sr-only" id="encounterType">ANTE ROOM</span><span class="sr-only" id="enemyFlavor"></span><span class="sr-only" id="enemyReward"></span><span class="sr-only" id="enemyDrop"></span>
+
+              <div class="enemy-actor" id="enemyActor" role="button" tabindex="0" aria-haspopup="dialog" aria-controls="enemyInfoModal" aria-label="Open enemy information">
+                <div class="enemy-aura" aria-hidden="true"></div>
+                <div class="enemy-art enemy-art-rat" id="enemyArt" role="img" aria-label="The Velvet Rat"><span class="enemy-shadow"></span><span class="enemy-body"></span><span class="enemy-face"></span><span class="enemy-accent"></span></div>
+              </div>
+
+              <div class="battle-feedback" id="battleFeedback" aria-live="polite"></div>
+              <div class="battle-callout" id="battleCallout"><span class="callout-icon">✦</span><span><b>THE TABLE IS OPEN</b><small>Hold reels, then pull.</small></span></div>
+
+              <div class="player-actor" id="playerActor">
+                <div class="player-glow" aria-hidden="true"></div><div class="player-shadow" aria-hidden="true"></div>
+                <div class="player-sprite hero-housebreaker" id="playerSprite" role="img" aria-label="The Housebreaker seen from behind"><span class="sprite-cape"></span><span class="sprite-body"></span><span class="sprite-head"></span><span class="sprite-weapon"></span><span class="sprite-glint"></span></div>
+                <div class="player-hud" aria-label="Player status"><div class="player-hud-heading"><span id="playerSceneName">The Housebreaker</span><span id="playerSceneClass">Risk runner · Level 1</span></div><div class="meter hp-meter" aria-label="Player vitality"><span id="playerHpBar"></span></div><span class="hud-value" id="playerHpText">100 / 100</span></div>
+              </div>
+            </section>
+          </section>
+
+          <section class="machine-panel" aria-labelledby="machineHeading">
+            <div class="machine-topline"><div class="machine-title"><span class="panel-kicker"><span class="live-dot"></span> LIVE TABLE</span><h2 id="machineHeading">Your reels</h2></div><div class="machine-stats" aria-label="Spin stats"><span><b id="streakValue">0</b><small>STREAK <i id="streakPips" aria-hidden="true"></i></small></span><span><b id="spinCount">SPINS 0</b><small>RUN</small></span></div></div>
+            <div class="reel-stage" id="reelStage"><div class="reel-shine" aria-hidden="true"></div><div class="payline" aria-hidden="true"><i></i><i></i></div><div class="reels" id="reels" role="list" aria-label="Three combat reels"></div></div>
+            <div class="machine-caption"><span id="pullCost">FREE PULL</span><span>Tap reel to hold</span><span id="spinCaption">ODDS LOADED</span></div>
+            <div class="spin-row"><button class="spin-button" id="spinButton" type="button" aria-label="Attack. Hold for 2 seconds to toggle idle mode"><span class="hold-progress" aria-hidden="true"></span><span class="spin-glyph" aria-hidden="true">⚔</span><span><strong>ATTACK</strong><small id="spinButtonHint">HOLD 2s: IDLE</small></span><kbd>ENTER</kbd></button><button class="ability-button skill-button" id="abilityButton" type="button" disabled aria-label="Use dealer skill"><span class="ability-icon" id="abilityIcon" aria-hidden="true">♜</span><span class="skill-copy"><b id="abilityName">SKILL</b><small id="abilityHintText">CHARGE 0%</small></span><span class="quick-badge" id="chargeText">0%</span></button></div>
+            <div class="result-banner" id="resultBanner" role="status" aria-live="polite"><span class="result-icon" id="resultIcon">✦</span><div><strong id="resultTitle">The table is waiting.</strong><p id="resultDetail">Pull the lever.</p></div></div>
+          </section>
+        </section>
+
+        <p class="cabinet-foot"><span>GRPG · Gambling RPG</span><span>Critical Spin <i>v0.6</i></span><span class="sr-only">Best table: <b id="bestValue">0</b></span></p>
+      </main>
+
+      <section class="modal-overlay hero-modal" id="heroPicker" role="dialog" aria-modal="true" aria-labelledby="heroPickerTitle" hidden>
+        <div class="modal-card hero-modal-card"><div class="modal-heading"><div><span class="modal-kicker">CHOOSE YOUR DEALER</span><h2 id="heroPickerTitle">Pick your machine.</h2></div><button class="modal-close" type="button" data-close-modal="heroPicker" aria-label="Close dealer selection">×</button></div><p class="modal-subtitle">Each dealer loads a different set of odds.</p><div class="hero-grid" id="heroGrid" role="list" aria-label="Choose a character"></div></div>
+      </section>
+
+      <section class="modal-overlay" id="characterInfoModal" role="dialog" aria-modal="true" aria-labelledby="characterInfoTitle" hidden>
+        <div class="modal-card"><div class="modal-heading"><div><span class="modal-kicker">DEALER CARD</span><h2 id="characterInfoTitle">Your dealer</h2></div><button class="modal-close" type="button" data-close-modal="characterInfoModal" aria-label="Close dealer card">×</button></div><div class="character-summary"><div class="avatar" id="modalPlayerAvatar" aria-hidden="true">♠</div><div><strong id="modalPlayerName">The Housebreaker</strong><p id="modalPlayerClass">Risk runner · Level 1</p></div></div><div class="modal-stat-line"><span>VITALITY <b id="modalPlayerHp">100 / 100</b></span><span>LUCK <b id="luckValue">12%</b></span></div><div class="modal-meter"><div class="bar-label"><span>ABILITY CHARGE</span><strong id="modalChargeText">0 / 100</strong></div><div class="meter charge-meter"><span id="modalChargeBar"></span></div></div><div class="trait-box"><span class="tag tag-gold">TRAIT</span><p id="traitText">Loaded Dice — every WILD has a 20% chance to become a SEVEN.</p></div><button class="ability-button modal-ability" id="modalAbilityButton" type="button" disabled><span class="ability-icon" id="modalAbilityIcon">♜</span><span><b id="modalAbilityName">House Edge</b><small id="modalAbilityHint">Charge it up by spinning</small></span></button><div class="hero-modal-actions"><button class="secondary-button" id="changeDealerButton" type="button">Change dealer</button></div><span class="sr-only" id="playerHeading"></span><span class="sr-only" id="playerClass"></span><span class="sr-only" id="abilityHint"></span><span class="sr-only meter" id="chargeBar"></span></div>
+      </section>
+
+      <section class="modal-overlay" id="enemyInfoModal" role="dialog" aria-modal="true" aria-labelledby="enemyInfoTitle" hidden>
+        <div class="modal-card enemy-info-card"><div class="modal-heading"><div><span class="modal-kicker">ENCOUNTER CARD</span><h2 id="enemyInfoTitle">The Velvet Rat</h2></div><button class="modal-close" type="button" data-close-modal="enemyInfoModal" aria-label="Close enemy information">×</button></div><div class="enemy-summary"><div class="enemy-modal-art enemy-art-rat" id="enemyModalArt" aria-hidden="true"><span class="enemy-body"></span><span class="enemy-face"></span><span class="enemy-accent"></span></div><div><strong id="enemyInfoName">The Velvet Rat</strong><p id="enemyInfoFlavor">A small-time cheat with a very large appetite.</p></div></div><div class="modal-stat-line"><span>VITALITY <b id="enemyInfoHp">160 / 160</b></span><span id="enemyInfoStatus">WATCHFUL</span></div><div class="meter enemy-info-meter"><span id="enemyInfoHpBar"></span></div><div class="enemy-reward-line"><span>BOUNTY <b id="enemyInfoReward">+35g</b></span><span>DROP <b id="enemyInfoDrop">CLOVER DUST</b></span></div></div>
+      </section>
+
+      <section class="modal-overlay" id="oddsModal" role="dialog" aria-modal="true" aria-labelledby="oddsTitle" hidden>
+        <div class="modal-card sheet-card"><div class="modal-heading"><div><span class="modal-kicker">MACHINE READOUT</span><h2 id="oddsTitle">Loaded odds</h2></div><button class="modal-close" type="button" data-close-modal="oddsModal" aria-label="Close odds">×</button></div><div class="reel-heading"><span>Current loadout</span><b id="reelPower">POWER +0</b></div><div class="odds-list" id="oddsList"></div><p class="microcopy">Upgrade between tables to tune the machine.</p></div>
+      </section>
+
+      <section class="modal-overlay" id="logModal" role="dialog" aria-modal="true" aria-labelledby="logTitle" hidden>
+        <div class="modal-card sheet-card"><div class="modal-heading"><div><span class="modal-kicker">TABLE TALK</span><h2 id="logTitle">Recent pulls</h2></div><button class="modal-close" type="button" data-close-modal="logModal" aria-label="Close history">×</button></div><ol class="combat-log" id="combatLog" aria-live="polite"></ol></div>
+      </section>
+
+      <section class="modal-overlay reward-panel hidden" id="rewardPanel" role="dialog" aria-modal="true" aria-labelledby="rewardHeading">
+        <div class="modal-card reward-card"><div class="modal-heading"><div><span class="modal-kicker">THE HOUSE PAYS</span><h2 id="rewardHeading">Choose an upgrade.</h2></div><span class="jackpot-seal" aria-hidden="true">WIN</span></div><p class="modal-subtitle" id="rewardFlavor">Tune the machine for the next table.</p><div class="upgrade-grid" id="upgradeGrid"></div></div>
+      </section>
+
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+      <script src="game.js"></script>
+    </body>
+    </html>
+  styles.css: |
+    :root {
+      --ink: #070a16;
+      --night: #0d1224;
+      --felt: #111b34;
+      --felt-hi: #21345b;
+      --line: rgba(218, 231, 255, .18);
+      --line-hi: rgba(218, 231, 255, .38);
+      --text: #f5f7ff;
+      --muted: #9faccc;
+      --dim: #657492;
+      --acid: #d9ff68;
+      --orange: #ff9f5c;
+      --red: #ff6377;
+      --blue: #75d8ff;
+      --purple: #c29dff;
+      --gold: #ffd36c;
+      --shadow: 0 20px 55px rgba(0, 0, 0, .46);
+      color-scheme: dark;
+      font-family: 'Trebuchet MS', ui-sans-serif, system-ui, sans-serif;
+      color: var(--text);
+      background: var(--ink);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; min-width: 320px; min-height: 100%; }
+    body { margin: 0; min-height: 100svh; min-height: 100dvh; overflow: hidden; background: radial-gradient(ellipse at 50% -15%, #2c3f70 0, #111a34 34rem, var(--ink) 72rem); }
+    button { font: inherit; color: inherit; }
+    button:focus-visible { outline: 2px solid var(--acid); outline-offset: 3px; }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font: 800 20px/1 'Trebuchet MS', sans-serif; letter-spacing: -.06em; }
+    h1 em { color: var(--acid); font-style: normal; }
+    h2 { font-size: 16px; letter-spacing: -.04em; }
+    .sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
+    .hidden { display: none !important; }
+    .noise { position: fixed; inset: 0; z-index: 60; pointer-events: none; opacity: .035; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E"); }
+
+    /* A narrow cabinet is the default target: mobile feels like a real game screen. */
+    .app-shell { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 7px; width: min(100%, 460px); height: 100svh; height: 100dvh; min-height: 0; margin: 0 auto; padding: max(8px, env(safe-area-inset-top)) 9px max(7px, env(safe-area-inset-bottom)); }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 42px; flex: 0 0 42px; }
+    .brand-lockup { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .brand-mark { display: flex; align-items: center; justify-content: center; gap: 1px; width: 52px; height: 31px; border: 1px solid rgba(217,255,104,.72); border-radius: 7px; color: var(--acid); background: linear-gradient(135deg, rgba(217,255,104,.15), rgba(217,255,104,.02)); box-shadow: 0 0 22px rgba(217,255,104,.14); font: 800 13px/1 'Trebuchet MS', sans-serif; transform: skew(-7deg); }
+    .brand-mark span:nth-child(2) { color: var(--orange); font-size: 17px; }
+    .brand-copy { min-width: 0; }
+    .brand-copy h1 { white-space: nowrap; }
+    .brand-copy > span { display: block; margin-top: 4px; color: var(--dim); font: 600 8px/1 'DM Mono', 'Courier New', monospace; letter-spacing: .12em; }
+    .brand-copy b { color: var(--gold); }
+    .top-stats { display: flex; align-items: center; gap: 9px; }
+    .top-stat { display: grid; gap: 3px; min-width: 30px; }
+    .top-stat i { color: var(--dim); font: 600 7px/1 'DM Mono', monospace; font-style: normal; letter-spacing: .1em; }
+    .top-stat strong { font: 700 13px/1 'DM Mono', monospace; }
+    .top-stat.gold strong { color: var(--gold); }
+    .icon-button, .modal-close { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,.04); color: var(--muted); cursor: pointer; font-size: 18px; transition: .18s ease; }
+    .icon-button:hover, .modal-close:hover { border-color: var(--line-hi); color: var(--text); background: rgba(255,255,255,.1); }
+
+    .game-cabinet { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; gap: 0; overflow: hidden; border: 1px solid rgba(217,255,104,.29); border-radius: 20px; background: linear-gradient(180deg, #141f3c, #080d1d); box-shadow: 0 18px 70px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.035); }
+    .game-stage { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+    .scene-viewport { position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; isolation: isolate; background: #1a2a51; }
+    .scene-backdrop, .scene-backdrop::before, .scene-backdrop::after { position: absolute; inset: 0; pointer-events: none; }
+    .scene-backdrop { overflow: hidden; background: linear-gradient(180deg, #829dd3 0, #526fa6 35%, #293b69 64%, #111932 100%); }
+    .scene-backdrop::before { content: ''; opacity: .74; background: radial-gradient(ellipse at 50% 12%, rgba(255,255,255,.9), transparent 24%), linear-gradient(180deg, transparent 33%, rgba(5,10,28,.15) 62%, rgba(4,8,21,.75) 100%); }
+    .scene-backdrop::after { content: ''; opacity: .45; background: radial-gradient(circle at 50% 75%, rgba(111,226,255,.28), transparent 32%), repeating-linear-gradient(105deg, transparent 0 24px, rgba(255,255,255,.04) 25px 26px); mix-blend-mode: screen; }
+    .moon { position: absolute; top: 9%; left: calc(50% - 46px); width: 92px; aspect-ratio: 1; border-radius: 50%; opacity: .84; background: radial-gradient(circle at 34% 31%, #fff 0 9%, #c9e0ff 38%, #8da7d6 72%); box-shadow: 0 0 42px rgba(222,239,255,.38); }
+    .moon::after { content: ''; position: absolute; inset: 21% 19% 24% 38%; border-radius: 50%; background: rgba(106,136,188,.24); box-shadow: -27px 31px 0 -12px rgba(106,136,188,.2), 29px -7px 0 -17px rgba(106,136,188,.23); }
+    .mountain { position: absolute; left: -8%; width: 116%; clip-path: polygon(0 100%, 0 72%, 8% 62%, 17% 74%, 31% 41%, 40% 65%, 52% 28%, 63% 60%, 75% 38%, 85% 69%, 94% 52%, 100% 67%, 100% 100%); }
+    .mountain-back { bottom: 27%; height: 49%; opacity: .52; background: #415986; }
+    .mountain-front { bottom: 23%; height: 38%; opacity: .85; background: linear-gradient(155deg, #273c68, #1d2a50); filter: drop-shadow(0 -8px 5px rgba(10,19,48,.2)); }
+    .horizon-glow { position: absolute; right: 20%; bottom: 28%; left: 20%; height: 15%; border-radius: 50%; background: rgba(102,216,255,.25); filter: blur(25px); }
+    .casino-arch { position: absolute; bottom: 22%; width: 24%; height: 49%; border: 9px solid rgba(180,204,245,.72); border-bottom: 0; border-radius: 120px 120px 0 0; filter: drop-shadow(0 10px 8px rgba(4,9,28,.35)); opacity: .74; }
+    .casino-arch::before, .casino-arch::after { content: ''; position: absolute; bottom: -12px; width: 120%; height: 25px; background: #7189bb; box-shadow: 0 10px 10px rgba(4,8,22,.32); }
+    .casino-arch::before { left: -10%; }
+    .casino-arch::after { bottom: -34px; left: -10%; height: 17px; opacity: .75; }
+    .casino-arch span { position: absolute; top: -18px; left: 50%; width: 13px; height: 13px; transform: translateX(-50%); border-radius: 50%; background: var(--gold); box-shadow: 0 0 12px var(--gold); }
+    .arch-left { left: 3%; }.arch-right { right: 3%; transform: scaleX(-1); }
+    .battle-lane { position: absolute; right: -16%; bottom: -19%; left: -16%; height: 62%; transform: perspective(220px) rotateX(58deg); background: linear-gradient(90deg, rgba(12,20,48,.6), rgba(98,125,184,.9) 50%, rgba(12,20,48,.6)); clip-path: polygon(33% 0, 67% 0, 100% 100%, 0 100%); }
+    .battle-lane i { position: absolute; top: 7%; left: 50%; width: 2px; height: 91%; transform-origin: top; background: linear-gradient(transparent, rgba(185,223,255,.35)); }
+    .battle-lane i:nth-child(2) { transform: rotate(12deg); opacity: .55; }.battle-lane i:nth-child(3) { transform: rotate(-12deg); opacity: .55; }
+    .floating-chip { position: absolute; display: grid; place-items: center; width: 25px; aspect-ratio: 1; border: 2px dashed rgba(255,255,255,.55); border-radius: 50%; color: var(--gold); background: rgba(20,29,58,.52); font: 700 11px 'DM Mono', monospace; opacity: .52; transform: rotate(-18deg); }
+    .chip-one { top: 34%; left: 15%; }.chip-two { top: 43%; right: 12%; color: var(--acid); transform: rotate(22deg) scale(.75); }.chip-three { top: 26%; right: 27%; color: var(--red); transform: rotate(12deg) scale(.55); }
+
+    /* Enemy HUD stays pinned to the top, with the actor lower on the battlefield. */
+    .scene-ui { position: absolute; z-index: 9; top: 12px; right: 12px; left: 12px; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+    .enemy-hud { width: min(88%, 330px); padding: 7px 9px 8px; border: 1px solid rgba(255,255,255,.2); border-radius: 9px; background: rgba(7,12,30,.64); box-shadow: 0 8px 20px rgba(0,0,0,.18); backdrop-filter: blur(9px); }
+    .enemy-hud-heading { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .enemy-hud-heading h2 { overflow: hidden; min-width: 0; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 2px 7px #000; }
+    .scene-level, .enemy-status { color: var(--orange); font: 600 7px/1 'DM Mono', monospace; letter-spacing: .08em; white-space: nowrap; }
+    .scene-level { color: var(--gold); }.enemy-status { margin-left: auto; }
+    .hud-value { display: block; margin-top: 4px; color: rgba(245,247,255,.75); text-align: right; font: 600 8px/1 'DM Mono', monospace; }
+    .meter { height: 6px; overflow: hidden; border-radius: 5px; background: rgba(3,7,18,.76); box-shadow: inset 0 1px 2px rgba(0,0,0,.45); }
+    .meter span { display: block; width: 0; height: 100%; border-radius: inherit; transition: width .35s ease; }
+    .enemy-meter { margin-top: 7px; }.enemy-meter span { background: linear-gradient(90deg, #ff4d76, #ff9d71); box-shadow: 0 0 12px rgba(255,91,130,.65); }
+    .scene-actions { display: flex; align-items: center; gap: 7px; }.round-chip { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid rgba(255,255,255,.2); border-radius: 8px; color: var(--red); background: rgba(12,18,39,.65); font-size: 16px; }
+    .enemy-actor { position: absolute; z-index: 4; top: 23%; left: 50%; width: min(88%, 380px); transform: translateX(-50%); display: grid; justify-items: center; transition: filter .3s, opacity .3s; }
+    .enemy-aura { position: absolute; top: 0; width: 175px; height: 140px; border-radius: 50%; background: radial-gradient(ellipse, rgba(255,91,130,.3), transparent 67%); filter: blur(10px); }
+    .enemy-art { position: relative; width: 132px; height: 132px; filter: drop-shadow(0 15px 9px rgba(5,9,25,.45)); }
+    .enemy-art > span { position: absolute; display: block; }.enemy-shadow { right: 12%; bottom: 3%; left: 12%; height: 14%; border-radius: 50%; background: rgba(4,8,24,.55); filter: blur(6px); }
+    .enemy-body { right: 25%; bottom: 17%; left: 25%; height: 57%; border-radius: 48% 48% 38% 38%; background: linear-gradient(145deg, #cf3b62, #571442 70%); box-shadow: inset 10px -10px 0 rgba(28,5,33,.28), 0 0 20px rgba(255,91,130,.18); }
+    .enemy-face { top: 17%; right: 31%; left: 31%; height: 34%; border-radius: 50% 50% 43% 43%; background: #f48e9c; box-shadow: inset -5px -7px 0 rgba(121,25,68,.25); }
+    .enemy-accent { top: 36%; right: 42%; left: 42%; height: 7%; border-radius: 50%; background: #1a0d30; box-shadow: 20px 0 #1a0d30; }
+    .enemy-art-rat .enemy-body { right: 21%; left: 21%; height: 48%; border-radius: 45% 45% 35% 40%; background: linear-gradient(140deg, #a7a6bd, #4d4a75 73%); }.enemy-art-rat .enemy-face { top: 20%; right: 28%; left: 28%; height: 33%; background: #bdb5cd; }.enemy-art-rat .enemy-face::before, .enemy-art-rat .enemy-face::after { content: ''; position: absolute; top: -16px; width: 24px; height: 24px; border-radius: 50% 50% 0 50%; background: #8d85aa; }.enemy-art-rat .enemy-face::before { left: -2px; transform: rotate(-23deg); }.enemy-art-rat .enemy-face::after { right: -2px; transform: scaleX(-1) rotate(-23deg); }.enemy-art-rat .enemy-accent { right: 40%; left: 40%; top: 37%; height: 6%; background: #322144; box-shadow: 19px 0 #322144; }
+    .enemy-art-joker .enemy-body { bottom: 14%; height: 61%; border-radius: 46% 46% 24% 24%; background: linear-gradient(140deg, #f2c73f, #a52d59 50%, #27215d); }.enemy-art-joker .enemy-face { background: #f8dac4; }.enemy-art-joker .enemy-face::before { content: ''; position: absolute; top: -22px; left: -12px; width: 75px; height: 22px; border-radius: 100% 100% 0 0; background: #332260; transform: rotate(-8deg); }.enemy-art-joker .enemy-accent { right: 40%; left: 40%; top: 36%; height: 5%; background: #2a163d; box-shadow: 19px 0 #2a163d; }
+    .enemy-art-skull .enemy-body { bottom: 13%; height: 58%; border-radius: 43% 43% 20% 20%; background: linear-gradient(145deg, #bce4e0, #638a9b 74%); }.enemy-art-skull .enemy-face { top: 15%; right: 27%; left: 27%; height: 43%; border-radius: 46% 46% 35% 35%; background: #d7f0e3; }.enemy-art-skull .enemy-accent { top: 34%; right: 37%; left: 37%; height: 13%; border-radius: 50%; background: #1b2a4f; box-shadow: 22px 0 #1b2a4f; }
+    .enemy-art-house .enemy-body { right: 20%; bottom: 10%; left: 20%; height: 68%; border-radius: 40% 40% 20% 20%; background: linear-gradient(145deg, #c99450, #51304e 68%); }.enemy-art-house .enemy-face { top: 9%; right: 26%; left: 26%; height: 43%; background: #e7bd77; box-shadow: inset -8px -8px rgba(70,32,54,.22); }.enemy-art-house .enemy-face::before { content: '♛'; position: absolute; top: -36px; left: 50%; color: var(--gold); font-size: 43px; text-shadow: 0 0 14px rgba(255,211,108,.65); transform: translateX(-50%); }.enemy-art-house .enemy-accent { top: 34%; right: 38%; left: 38%; height: 8%; background: #38213d; box-shadow: 21px 0 #38213d; }
+    .enemy-actor.defeated { filter: grayscale(1); opacity: .58; }
+
+    .battle-callout { position: absolute; z-index: 5; bottom: 45%; left: 50%; display: flex; align-items: center; gap: 7px; min-width: 180px; padding: 6px 9px; transform: translateX(-50%); border: 1px solid rgba(217,255,104,.2); border-radius: 9px; background: rgba(7,14,30,.4); color: var(--muted); backdrop-filter: blur(6px); }.battle-callout b { display: block; color: var(--acid); font: 600 7px 'DM Mono', monospace; letter-spacing: .09em; }.battle-callout small { display: block; margin-top: 2px; font-size: 8px; }.callout-icon { color: var(--gold); font-size: 16px; }
+    .player-actor { position: absolute; z-index: 6; bottom: 6%; left: 50%; width: min(80%, 330px); transform: translateX(-50%); display: grid; justify-items: center; }.player-glow { position: absolute; bottom: 1%; width: 160px; height: 100px; border-radius: 50%; background: radial-gradient(ellipse, rgba(116,226,255,.34), transparent 68%); filter: blur(8px); }.player-shadow { position: absolute; bottom: 5%; width: 125px; height: 18px; border-radius: 50%; background: rgba(3,7,23,.7); filter: blur(6px); }
+    .player-sprite { position: relative; width: 132px; height: 153px; filter: drop-shadow(0 14px 10px rgba(4,8,24,.55)); }.player-sprite > span { position: absolute; display: block; }.sprite-cape { right: 24%; bottom: 12%; left: 24%; height: 64%; clip-path: polygon(50% 0, 100% 15%, 84% 100%, 16% 100%, 0 15%); background: linear-gradient(140deg, #352767, #15122f 72%); }.sprite-body { right: 35%; bottom: 28%; left: 35%; height: 39%; border-radius: 48% 48% 28% 28%; background: linear-gradient(160deg, #98deec, #23698d); box-shadow: inset -7px -5px 0 rgba(11,33,69,.3); }.sprite-head { top: 15%; right: 38%; left: 38%; height: 24%; border-radius: 50% 50% 45% 45%; background: #f2c7b5; box-shadow: inset -4px -3px 0 rgba(100,38,57,.18); }.sprite-head::before { content: ''; position: absolute; top: -10px; left: -9px; width: 48px; height: 26px; border-radius: 85% 40% 0 0; background: #f6f7ff; transform: rotate(-12deg); }.sprite-weapon { top: 25%; left: 16%; width: 9%; height: 56%; border-radius: 3px; background: linear-gradient(#fff5bf 0 17%, #d9ff68 18% 24%, #a6bbde 25% 100%); transform: rotate(34deg); box-shadow: 0 0 12px rgba(217,255,104,.75); }.sprite-glint { top: 20%; left: 5%; width: 17px; height: 17px; border: 2px solid var(--gold); border-radius: 50%; background: rgba(255,211,108,.22); box-shadow: 0 0 14px var(--gold); }.hero-ironsaint .sprite-cape { background: linear-gradient(140deg, #1b5578, #0e183c 72%); }.hero-ironsaint .sprite-body { background: linear-gradient(160deg, #dceeff, #4f94bc); }.hero-ironsaint .sprite-weapon { background: linear-gradient(#eaffff 0 17%, #75d8ff 18% 24%, #a6bbde 25% 100%); }.hero-emberjoker .sprite-cape { background: linear-gradient(140deg, #893552, #29123c 72%); }.hero-emberjoker .sprite-body { background: linear-gradient(160deg, #ffc16f, #b74443); }.hero-emberjoker .sprite-weapon { background: linear-gradient(#fff2b2 0 17%, #ff9f5c 18% 24%, #aa5b5b 25% 100%); box-shadow: 0 0 15px rgba(255,159,92,.8); }
+    .player-hud { width: min(210px, 90%); padding: 5px 8px 6px; border: 1px solid rgba(255,255,255,.2); border-radius: 8px; background: rgba(8,13,31,.7); text-align: center; backdrop-filter: blur(8px); }.player-hud-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 7px; }.player-hud-heading span:first-child { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }.player-hud-heading span:last-child { color: rgba(230,237,255,.7); font: 8px 'DM Mono', monospace; white-space: nowrap; }.player-hud .meter { margin-top: 5px; }.hp-meter span { background: linear-gradient(90deg, #38e790, #d9ff68); box-shadow: 0 0 13px rgba(217,255,104,.58); }.player-hud .hud-value { margin-top: 3px; color: var(--acid); font-size: 7px; }
+
+    /* The physical reel bay occupies the lower third of the cabinet. */
+    .machine-panel { position: relative; z-index: 8; display: flex; flex: 0 1 clamp(228px, 38%, 330px); min-height: 0; flex-direction: column; padding: 11px 11px 9px; border-top: 1px solid rgba(217,255,104,.3); background: linear-gradient(145deg, rgba(20,31,54,.98), rgba(7,13,27,.99)); }.machine-topline { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }.machine-title h2 { margin-top: 3px; color: #dbe5ff; font-size: 13px; }.panel-kicker { display: flex; align-items: center; gap: 6px; color: var(--dim); font: 600 7px/1 'DM Mono', monospace; letter-spacing: .11em; }.live-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--acid); box-shadow: 0 0 10px var(--acid); }.machine-stats { display: flex; gap: 12px; text-align: right; }.machine-stats span { display: grid; gap: 2px; }.machine-stats b { color: var(--acid); font: 700 15px/1 'DM Mono', monospace; }.machine-stats span + span b { color: var(--gold); font-size: 9px; margin-top: 4px; }.machine-stats small { color: var(--dim); font: 600 6px/1 'DM Mono', monospace; letter-spacing: .08em; }
+    .reel-stage { position: relative; flex: 1 1 auto; min-height: 96px; height: auto; margin: 8px 0 6px; padding: 7px 8px; overflow: hidden; border: 0; border-radius: 0; background: radial-gradient(ellipse at 50% 50%, rgba(81,115,180,.48), transparent 72%), #101a33; }.reel-stage::before, .reel-stage::after { content: ''; position: absolute; z-index: 6; width: 15px; height: 15px; border: 0; opacity: .78; }.reel-stage::before { top: 0; left: 0; }.reel-stage::after { right: 0; bottom: 0; }.reel-shine { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(110deg, transparent 17%, rgba(255,255,255,.1) 48%, transparent 69%); opacity: .24; }
+    .payline { position: absolute; z-index: 8; top: 50%; right: 3px; left: 3px; display: flex; align-items: center; gap: 5px; transform: translateY(-50%); pointer-events: none; }.payline i { flex: 1; height: 2px; background: linear-gradient(90deg, transparent, rgba(217,255,104,.9)); box-shadow: 0 0 7px rgba(217,255,104,.52); }.payline i:last-of-type { background: linear-gradient(90deg, rgba(217,255,104,.9), transparent); }.payline b { padding: 3px 5px; border: 1px solid rgba(217,255,104,.58); border-radius: 4px; color: var(--acid); background: #17243a; font: 600 6px 'DM Mono', monospace; letter-spacing: .08em; white-space: nowrap; }
+    .reels { position: relative; z-index: 3; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; height: 100%; }.reel { position: relative; display: grid; place-items: center; min-width: 0; padding: 0; overflow: hidden; border: 1px solid rgba(213,227,255,.31); border-radius: 8px; background: linear-gradient(180deg, rgba(12,20,39,.04), rgba(28,48,78,.97) 27%, rgba(22,38,66,.99) 71%, rgba(12,20,39,.04)); cursor: pointer; }.reel::before, .reel::after { content: ''; position: absolute; z-index: 5; right: 0; left: 0; height: 35px; pointer-events: none; }.reel::before { top: 0; background: linear-gradient(rgba(11,18,36,.98), rgba(11,18,36,.54), transparent); }.reel::after { bottom: 0; background: linear-gradient(transparent, rgba(11,18,36,.93)); }.reel-window { position: relative; display: grid; place-items: center; width: 100%; height: 100%; overflow: hidden; mask-image: linear-gradient(180deg, transparent 0, #000 23%, #000 77%, transparent 100%); }.reel-strip { position: absolute; top: -90px; right: 0; left: 0; display: grid; justify-items: center; gap: 15px; opacity: .36; }.strip-symbol { color: var(--symbol-color, var(--text)); font-size: 19px; line-height: 1; filter: blur(.3px); }.reel-value { position: relative; z-index: 4; display: grid; justify-items: center; gap: 3px; }.reel-value .symbol-glyph { color: var(--symbol-color, var(--text)); font-size: 32px; line-height: 1; filter: drop-shadow(0 0 10px var(--symbol-color, var(--text))); }.reel-value .symbol-name { color: rgba(235,242,255,.77); font: 600 6px 'DM Mono', monospace; letter-spacing: .08em; }.reel.locked { border-color: var(--gold); box-shadow: inset 0 0 0 1px rgba(255,211,108,.24), 0 0 18px rgba(255,211,108,.16); }.lock-badge { position: absolute; z-index: 7; top: 5px; right: 5px; padding: 3px 4px; border-radius: 4px; color: var(--gold); background: rgba(255,211,108,.16); font: 600 6px 'DM Mono', monospace; letter-spacing: .05em; }.reel.spinning .reel-strip { animation: reel-scroll .24s linear infinite; opacity: .68; }.reel.spinning .reel-value { animation: symbol-jitter .12s linear infinite; filter: blur(1.2px); opacity: .75; }.reel.jackpot { animation: jackpot-frame .7s ease both; }
+    @keyframes reel-scroll { from { transform: translateY(0); } to { transform: translateY(52px); } }@keyframes symbol-jitter { 0% { transform: translateY(-6px); } 50% { transform: translateY(7px); } 100% { transform: translateY(-6px); } }@keyframes jackpot-frame { 0%, 100% { box-shadow: inset 0 0 0 rgba(217,255,104,0); } 35% { box-shadow: inset 0 0 35px rgba(217,255,104,.78), 0 0 36px rgba(217,255,104,.44); } }
+    .machine-caption { display: flex; justify-content: space-between; gap: 5px; color: var(--dim); font: 600 6px/1 'DM Mono', monospace; letter-spacing: .06em; }.machine-caption span:first-child { color: var(--acid); }
+    .spin-row { display: grid; grid-template-columns: minmax(0, 1fr) 75px; gap: 6px; margin-top: 8px; }.spin-button, .auto-button { display: flex; align-items: center; min-height: 50px; border-radius: 9px; cursor: pointer; transition: .18s ease; }.spin-button { justify-content: center; gap: 7px; border: 1px solid var(--acid); color: var(--ink); background: linear-gradient(105deg, var(--acid), #efffa9); box-shadow: 0 0 25px rgba(217,255,104,.2); }.spin-button:hover { background: #edffa0; box-shadow: 0 0 35px rgba(217,255,104,.35); transform: translateY(-1px); }.spin-button:disabled { opacity: .48; cursor: wait; transform: none; }.spin-glyph { font-size: 21px; line-height: 1; }.spin-button strong { display: block; font: 800 14px/1 'Trebuchet MS', sans-serif; letter-spacing: .05em; }.spin-button small { display: block; margin-top: 3px; opacity: .66; font-size: 8px; }kbd { margin-left: auto; padding: 3px 4px; border: 1px solid rgba(9,14,28,.28); border-radius: 4px; font: 600 6px 'DM Mono', monospace; }
+    .auto-button { justify-content: center; gap: 5px; padding: 6px; border: 1px solid var(--line-hi); background: rgba(255,255,255,.035); text-align: center; }.auto-button:hover { border-color: var(--muted); background: rgba(255,255,255,.09); }.auto-button[aria-pressed="true"] { color: var(--acid); border-color: rgba(217,255,104,.6); background: rgba(217,255,104,.09); }.auto-indicator { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); box-shadow: inset 0 0 0 2px rgba(0,0,0,.28); }.auto-button[aria-pressed="true"] .auto-indicator { background: var(--acid); box-shadow: 0 0 10px var(--acid); }.auto-button b { display: block; color: inherit; font: 700 7px 'DM Mono', monospace; letter-spacing: .08em; }.auto-button small { display: block; margin-top: 3px; color: var(--muted); font: 7px 'DM Mono', monospace; }
+    .result-banner { display: flex; align-items: center; gap: 7px; min-height: 34px; margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--line); }.result-icon { display: grid; place-items: center; flex: 0 0 auto; width: 22px; height: 22px; border: 1px solid rgba(217,255,104,.34); border-radius: 6px; color: var(--acid); background: rgba(217,255,104,.07); font-size: 12px; }.result-banner strong { display: block; font-size: 8px; }.result-banner p { overflow: hidden; max-width: 335px; margin-top: 2px; color: var(--muted); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }.result-banner.hot .result-icon { color: var(--orange); border-color: rgba(255,159,92,.55); background: rgba(255,159,92,.1); }.result-banner.jackpot .result-icon { color: var(--acid); border-color: var(--acid); background: rgba(217,255,104,.16); }.result-banner.heal .result-icon { color: var(--blue); border-color: rgba(117,216,255,.5); background: rgba(117,216,255,.1); }
+
+    /* Feedback floats over the battle scene and disappears without adding layout. */
+    .battle-feedback { position: absolute; z-index: 20; top: 47%; left: 50%; width: 100%; height: 0; transform: translateX(-50%); pointer-events: none; text-align: center; }.battle-feedback .feedback-pop { display: block; color: var(--acid); font: 900 21px/1 'Trebuchet MS', sans-serif; text-shadow: 0 2px 0 #11172d, 0 0 15px currentColor; animation: feedback-float 1.1s ease-out both; }.battle-feedback .feedback-pop.damage { color: #ff9f5c; }.battle-feedback .feedback-pop.block { color: var(--blue); }.battle-feedback .feedback-pop.heal { color: #71f5b2; }.battle-feedback .feedback-pop.jackpot { color: var(--gold); font-size: 25px; }.battle-feedback .feedback-pop.enemy-hit { color: var(--red); font-size: 17px; }@keyframes feedback-float { from { opacity: 0; transform: translateY(12px) scale(.72); } 15% { opacity: 1; } to { opacity: 0; transform: translateY(-42px) scale(1.04); } }
+
+    .quick-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; flex: 0 0 48px; }.quick-button { position: relative; display: flex; align-items: center; justify-content: center; gap: 5px; min-width: 0; padding: 4px; overflow: hidden; border: 1px solid var(--line); border-radius: 9px; background: rgba(18,27,48,.8); color: var(--muted); cursor: pointer; font: 600 7px 'DM Mono', monospace; letter-spacing: .03em; }.quick-button:hover, .quick-button:focus-visible { border-color: var(--line-hi); color: var(--text); }.quick-button:disabled { color: var(--dim); cursor: not-allowed; opacity: .75; }.quick-icon { display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid rgba(217,255,104,.33); border-radius: 6px; color: var(--acid); background: rgba(217,255,104,.08); font: 15px/1 'Trebuchet MS', sans-serif; }.quick-badge { position: absolute; top: 3px; right: 4px; color: var(--purple); font: 600 6px 'DM Mono', monospace; }
+    .cabinet-foot { display: none; color: var(--dim); font: 6px/1 'DM Mono', monospace; letter-spacing: .03em; }.cabinet-foot i { color: var(--acid); font-style: normal; }
+
+    /* Information, dealer selection, and rewards are sheets over the cabinet. */
+    .modal-overlay { position: fixed; z-index: 45; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(2,5,15,.72); backdrop-filter: blur(8px); }.modal-overlay[hidden] { display: none; }.modal-card { width: min(100%, 410px); max-height: min(90svh, 700px); overflow: auto; padding: 18px; border: 1px solid rgba(217,255,104,.35); border-radius: 16px; background: linear-gradient(145deg, #1a2745, #0b1124 88%); box-shadow: var(--shadow); }.modal-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }.modal-kicker { display: block; margin-bottom: 6px; color: var(--acid); font: 600 8px/1 'DM Mono', monospace; letter-spacing: .12em; }.modal-heading h2 { font-size: 20px; }.modal-close { flex: 0 0 auto; width: 30px; height: 30px; font-size: 22px; }.modal-subtitle { margin-top: 8px; color: var(--muted); font-size: 10px; line-height: 1.35; }.hero-grid { display: grid; gap: 8px; margin-top: 16px; }.hero-card { position: relative; display: grid; grid-template-columns: 43px minmax(0,1fr); align-items: center; gap: 10px; min-height: 65px; padding: 9px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.035); cursor: pointer; text-align: left; transition: .18s ease; }.hero-card:hover { border-color: var(--line-hi); background: rgba(255,255,255,.08); transform: translateY(-1px); }.hero-card.selected { border-color: var(--hero-color, var(--acid)); box-shadow: inset 3px 0 0 var(--hero-color, var(--acid)); }.hero-portrait { display: grid; place-items: center; width: 41px; height: 47px; border: 1px solid var(--hero-color, var(--acid)); border-radius: 9px; color: var(--hero-color, var(--acid)); background: rgba(255,255,255,.04); font-size: 23px; }.hero-copy { min-width: 0; }.hero-copy h3 { overflow: hidden; margin-bottom: 3px; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }.hero-copy p { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }.hero-tag { position: absolute; top: 9px; right: 9px; color: var(--dim); font: 600 6px 'DM Mono', monospace; letter-spacing: .07em; }.hero-card.selected .hero-tag { color: var(--hero-color, var(--acid)); }
+    .character-summary { display: flex; align-items: center; gap: 10px; margin-top: 18px; }.avatar { display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid rgba(217,255,104,.45); border-radius: 12px; color: var(--acid); background: rgba(217,255,104,.1); font-size: 25px; }.character-summary strong { display: block; font-size: 14px; }.character-summary p { margin-top: 3px; color: var(--muted); font-size: 10px; }.modal-stat-line { display: flex; justify-content: space-between; margin-top: 16px; color: var(--dim); font: 600 8px 'DM Mono', monospace; letter-spacing: .07em; }.modal-stat-line b { color: var(--text); letter-spacing: 0; }.modal-meter { margin-top: 16px; }.bar-label { display: flex; justify-content: space-between; margin: 0 0 5px; color: var(--muted); font: 600 8px 'DM Mono', monospace; letter-spacing: .06em; }.bar-label strong { color: var(--text); letter-spacing: 0; }.charge-meter span { background: linear-gradient(90deg, var(--purple), var(--blue)); box-shadow: 0 0 12px rgba(194,157,255,.5); }.trait-box { margin-top: 16px; padding-top: 13px; border-top: 1px solid var(--line); }.tag { display: inline-block; padding: 4px 6px; border-radius: 4px; font: 600 7px 'DM Mono', monospace; letter-spacing: .05em; }.tag-gold { border: 1px solid rgba(255,211,108,.25); color: var(--gold); background: rgba(255,211,108,.11); }.trait-box p { margin-top: 8px; color: var(--muted); font-size: 10px; line-height: 1.45; }.ability-button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px; margin-top: 14px; border: 1px solid rgba(194,157,255,.3); border-radius: 9px; background: rgba(194,157,255,.09); text-align: left; cursor: pointer; }.ability-button:disabled { cursor: not-allowed; opacity: .5; }.ability-button:not(:disabled):hover { border-color: var(--purple); background: rgba(194,157,255,.17); }.ability-icon { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid rgba(194,157,255,.45); border-radius: 7px; color: var(--purple); font-size: 16px; }.ability-button b { display: block; font-size: 10px; }.ability-button small { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }.modal-ability { margin-top: 16px; }.hero-modal-actions { display: flex; justify-content: flex-end; margin-top: 14px; }.secondary-button { padding: 8px 11px; border: 1px solid var(--line-hi); border-radius: 8px; background: rgba(255,255,255,.04); color: var(--muted); cursor: pointer; font-size: 9px; }.secondary-button:hover { color: var(--text); border-color: var(--acid); }
+    .sheet-card { align-self: end; width: min(100%, 410px); max-height: min(76svh, 600px); border-bottom-right-radius: 7px; border-bottom-left-radius: 7px; }.reel-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 16px; color: var(--muted); font-size: 10px; }.reel-heading b { color: var(--acid); font: 600 8px 'DM Mono', monospace; }.odds-list { display: grid; gap: 9px; margin-top: 12px; }.odds-row { display: grid; grid-template-columns: 20px 1fr auto; align-items: center; gap: 7px; font-size: 10px; }.odds-symbol { color: var(--symbol-color, var(--text)); font-size: 15px; text-align: center; }.odds-row label { color: var(--muted); }.odds-row strong { color: var(--text); font: 600 9px 'DM Mono', monospace; }.odds-track { grid-column: 2 / 4; height: 3px; background: #29334a; }.odds-track span { display: block; width: 50%; height: 100%; background: var(--symbol-color, var(--acid)); }.microcopy { margin-top: 12px; color: var(--dim); font-size: 9px; line-height: 1.4; }.combat-log { display: grid; gap: 8px; margin: 18px 0 0; padding: 0; list-style: none; }.combat-log li { display: flex; align-items: baseline; gap: 7px; color: var(--muted); font-size: 9px; }.combat-log li::before { content: '›'; color: var(--dim); font-size: 14px; }.combat-log li:first-child { color: var(--text); }.combat-log li b { color: var(--acid); font-weight: 600; }.combat-log li .log-time { margin-left: auto; color: var(--dim); font: 8px 'DM Mono', monospace; }
+    .reward-panel { place-items: center; }.reward-card { border-color: rgba(255,211,108,.5); background: radial-gradient(circle at 8% 10%, rgba(255,211,108,.15), transparent 22rem), linear-gradient(145deg, #31282d, #11192e); }.jackpot-seal { display: grid; place-items: center; width: 42px; height: 42px; transform: rotate(-8deg); border: 1px solid var(--gold); border-radius: 9px; color: var(--gold); font: 600 9px 'DM Mono', monospace; box-shadow: inset 0 0 0 3px rgba(255,211,108,.09); }.upgrade-grid { display: grid; gap: 8px; margin-top: 16px; }.upgrade-card { position: relative; display: grid; grid-template-columns: 38px 1fr; grid-template-rows: auto auto; column-gap: 9px; min-height: 60px; padding: 9px; border: 1px solid var(--line-hi); border-radius: 9px; background: rgba(8,10,18,.42); cursor: pointer; text-align: left; transition: .18s ease; }.upgrade-card:hover { border-color: var(--gold); background: rgba(255,211,108,.09); transform: translateY(-1px); }.upgrade-icon { grid-row: 1 / 3; display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid rgba(255,211,108,.3); border-radius: 8px; color: var(--gold); font-size: 19px; }.upgrade-card h3 { padding-right: 54px; font-size: 11px; }.upgrade-card p { grid-column: 2; margin-top: 3px; color: var(--muted); font-size: 8px; line-height: 1.3; }.upgrade-cost { position: absolute; top: 10px; right: 10px; color: var(--gold); font: 600 7px 'DM Mono', monospace; }
+    .toast { position: fixed; right: 12px; bottom: max(68px, env(safe-area-inset-bottom)); left: 12px; z-index: 55; width: fit-content; max-width: calc(100% - 24px); margin: auto; padding: 9px 12px; border: 1px solid var(--acid); border-radius: 8px; background: #17233a; color: var(--acid); font: 600 9px 'DM Mono', monospace; opacity: 0; transform: translateY(12px); pointer-events: none; transition: .2s ease; }.toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (min-width: 700px) { body { display: grid; place-items: center; }.app-shell { height: 100svh; height: 100dvh; min-height: 0; padding: 14px 0; }.game-cabinet { border-radius: 22px; }.machine-panel { flex-basis: clamp(270px, 32%, 315px); }.quick-actions { flex-basis: 52px; }.cabinet-foot { flex-basis: 16px; } }
+    @media (max-height: 700px) { .app-shell { min-height: 0; gap: 5px; }.topbar { min-height: 35px; flex-basis: 35px; }.machine-panel { flex-basis: 235px; padding-top: 8px; }.reel-stage { height: auto; min-height: 96px; }.spin-button, .auto-button { min-height: 43px; }.quick-actions { flex-basis: 43px; }.cabinet-foot { display: none; } }
+    @media (max-width: 350px) { .brand-mark { width: 44px; }.brand-copy h1 { font-size: 17px; }.top-stat:first-child { display: none; }.enemy-hud { width: 91%; }.enemy-hud-heading h2 { font-size: 11px; }.reel-stage { padding-inline: 5px; }.reels { gap: 4px; }.reel-value .symbol-glyph { font-size: 28px; }.spin-row { grid-template-columns: 1fr 65px; }.quick-button { font-size: 6px; }.quick-icon { width: 18px; height: 18px; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; } }
+
+    /* v0.4 foundation: readable type and a continuous submerged-cylinder reel surface. */
+    html { height: 100%; }
+    html, body { height: 100%; }
+    body { min-height: 100svh; min-height: 100dvh; }
+    .app-shell {
+      height: 100svh;
+      height: 100dvh;
+      min-height: 0;
+      gap: 10px;
+      padding-top: max(10px, env(safe-area-inset-top));
+      padding-bottom: max(10px, env(safe-area-inset-bottom));
+    }
+    .game-cabinet, .game-stage, .scene-viewport { height: 100%; min-height: 0; }
+    .topbar { min-height: 48px; flex-basis: 48px; }
+    h1 { font-size: 25px; }
+    h2 { font-size: 20px; }
+    .brand-mark { width: 62px; height: 38px; font-size: 17px; }
+    .brand-mark span:nth-child(2) { font-size: 21px; }
+    .brand-copy > span { margin-top: 5px; font-size: 10px; }
+    .top-stats { gap: 12px; }
+    .top-stat { min-width: 38px; gap: 4px; }
+    .top-stat i { font-size: 10px; }
+    .top-stat strong { font-size: 17px; }
+    .icon-button { width: 38px; height: 38px; font-size: 23px; }
+
+    /* Keep the encounter readout clear of the actors and make its only persistent data legible. */
+    .scene-ui { top: 16px; right: 16px; left: 16px; }
+    .enemy-hud { width: min(88%, 380px); padding: 10px 12px 11px; border-radius: 12px; }
+    .enemy-hud-heading { gap: 8px; }
+    .enemy-hud-heading h2 { font-size: 18px; }
+    .scene-level, .enemy-status { font-size: 10px; }
+    .hud-value { margin-top: 5px; font-size: 12px; }
+    .meter { height: 10px; }
+    .enemy-meter { margin-top: 9px; }
+    .round-chip { width: 38px; height: 38px; font-size: 21px; }
+    .player-hud { width: min(250px, 92%); padding: 8px 11px 9px; border-radius: 11px; }
+    .player-hud-heading { gap: 9px; }
+    .player-hud-heading span:first-child { font-size: 14px; }
+    .player-hud-heading span:last-child { font-size: 10px; }
+    .player-hud .meter { margin-top: 7px; }
+    .player-hud .hud-value { margin-top: 4px; font-size: 11px; }
+    .battle-callout { min-width: 225px; padding: 9px 12px; gap: 9px; }
+    .battle-callout b { font-size: 10px; }
+    .battle-callout small { margin-top: 3px; font-size: 11px; }
+    .callout-icon { font-size: 21px; }
+
+    /* This panel is allowed to flex with the cabinet so short phones never create a page-sized overflow. */
+    .machine-panel {
+      display: flex;
+      flex: 0 1 clamp(228px, 38%, 330px);
+      min-height: 0;
+      flex-direction: column;
+      padding: 14px 14px 12px;
+    }
+    .machine-topline { flex: 0 0 auto; }
+    .machine-title h2 { margin-top: 5px; font-size: 20px; }
+    .panel-kicker { gap: 8px; font-size: 10px; }
+    .live-dot { width: 7px; height: 7px; }
+    .machine-stats { gap: 16px; }
+    .machine-stats span { gap: 3px; }
+    .machine-stats b { font-size: 19px; }
+    .machine-stats span + span b { font-size: 12px; }
+    .machine-stats small { font-size: 9px; }
+
+    /* One shared bay reads as the front arc of a reel drum; each button remains a full hit target. */
+    .reel-stage {
+      flex: 1 1 auto;
+      min-height: 96px;
+      height: auto;
+      margin: 10px -2px 7px;
+      padding: 0;
+      overflow: hidden;
+      border: 0;
+      border-radius: 0;
+      isolation: isolate;
+      background:
+        radial-gradient(ellipse 86% 88% at 50% 50%, rgba(93, 139, 211, .96) 0%, rgba(47, 77, 133, .94) 35%, rgba(23, 40, 76, .82) 61%, rgba(10, 16, 34, 0) 100%),
+        linear-gradient(180deg, rgba(13, 21, 43, 0), rgba(28, 53, 97, .68) 50%, rgba(13, 21, 43, 0));
+      box-shadow: 0 0 28px rgba(78, 132, 211, .15), inset 0 0 34px rgba(4, 9, 23, .32);
+      mask-image: linear-gradient(180deg, transparent 0%, #000 13%, #000 87%, transparent 100%);
+    }
+    .reel-stage::before {
+      content: '';
+      position: absolute;
+      z-index: 6;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(180deg, rgba(7, 13, 30, .96), rgba(7, 13, 30, .3) 20%, transparent 35%, transparent 67%, rgba(7, 13, 30, .32) 82%, rgba(7, 13, 30, .98)),
+        radial-gradient(ellipse 44% 75% at 50% 50%, transparent 0 48%, rgba(5, 10, 25, .24) 80%, rgba(3, 7, 19, .6) 100%);
+    }
+    .reel-stage::after {
+      content: '';
+      position: absolute;
+      z-index: 5;
+      inset: 28% 0;
+      pointer-events: none;
+      border-top: 1px solid rgba(217, 255, 104, .42);
+      border-bottom: 1px solid rgba(217, 255, 104, .2);
+      background: linear-gradient(180deg, rgba(255, 255, 255, .12), transparent 22%, transparent 76%, rgba(2, 7, 20, .18));
+      box-shadow: 0 0 18px rgba(217, 255, 104, .12);
+    }
+    .reel-shine { z-index: 4; opacity: .3; background: linear-gradient(110deg, transparent 8%, rgba(255,255,255,.08) 38%, rgba(255,255,255,.2) 50%, transparent 74%); }
+    .payline { top: 50%; right: 0; left: 0; gap: 8px; }
+    .payline i { height: 3px; }
+    .payline b { padding: 4px 7px; border-radius: 5px; font-size: 10px; }
+    .reels {
+      gap: 0;
+      height: 100%;
+      perspective: 900px;
+      transform-style: preserve-3d;
+      mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,.35) 13%, #000 35%, #000 65%, rgba(0,0,0,.35) 87%, transparent 100%);
+    }
+    .reel {
+      border: 0;
+      border-radius: 0;
+      background: radial-gradient(ellipse 105% 78% at 50% 50%, rgba(84, 128, 197, .9) 0%, rgba(40, 70, 124, .78) 44%, rgba(14, 27, 56, .16) 82%, transparent 100%);
+      transform-style: preserve-3d;
+    }
+    .reel:nth-child(1) { transform: rotateY(7deg) scaleX(.98); }
+    .reel:nth-child(2) { background: radial-gradient(ellipse 115% 78% at 50% 50%, rgba(119, 168, 231, .98) 0%, rgba(47, 82, 145, .88) 49%, rgba(15, 29, 59, .16) 84%, transparent 100%); }
+    .reel:nth-child(3) { transform: rotateY(-7deg) scaleX(.98); }
+    .reel + .reel { box-shadow: inset 1px 0 rgba(219, 235, 255, .13); }
+    .reel::before, .reel::after { right: 0; left: 0; height: 43%; z-index: 3; }
+    .reel::before { top: 0; background: linear-gradient(180deg, rgba(8, 14, 32, .84), rgba(8, 14, 32, .28) 58%, transparent); }
+    .reel::after { bottom: 0; background: linear-gradient(0deg, rgba(8, 14, 32, .9), rgba(8, 14, 32, .3) 58%, transparent); }
+    .reel-window {
+      mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,.22) 14%, #000 35%, #000 65%, rgba(0,0,0,.22) 86%, transparent 100%);
+    }
+    .reel-strip { top: -110px; gap: 28px; opacity: .42; transform-style: preserve-3d; }
+    .strip-symbol { font-size: 29px; line-height: 1; }
+    .strip-symbol:nth-child(1), .strip-symbol:nth-child(5) { opacity: .24; filter: blur(2.8px); transform: scale(.62) rotateX(56deg); }
+    .strip-symbol:nth-child(2), .strip-symbol:nth-child(4) { opacity: .58; filter: blur(1.2px); transform: scale(.82) rotateX(28deg); }
+    .strip-symbol:nth-child(3) { opacity: .88; filter: blur(.3px); transform: scale(1.02); }
+    .reel-value { gap: 5px; }
+    .reel-value .symbol-glyph { font-size: 48px; }
+    .reel-value .symbol-name { font-size: 10px; }
+    .reel.locked { border: 0; box-shadow: inset 0 -4px 0 var(--gold), inset 0 4px 0 rgba(255, 211, 108, .5), 0 0 22px rgba(255, 211, 108, .2); }
+    .lock-badge { top: 9px; right: 50%; padding: 4px 7px; transform: translateX(50%); border: 1px solid rgba(255,211,108,.55); border-radius: 999px; font-size: 10px; }
+    .reel.spinning .reel-strip { animation: cylinder-roll .34s linear infinite; opacity: .82; }
+    .reel.spinning .reel-value { animation: cylinder-value .22s linear infinite; filter: blur(1.8px); }
+    @keyframes cylinder-roll { from { transform: translateY(-14px) rotateX(-8deg) scaleY(.94); } to { transform: translateY(72px) rotateX(8deg) scaleY(1.04); } }
+    @keyframes cylinder-value { 0%, 100% { transform: translateY(-8px) scaleY(.86); } 50% { transform: translateY(8px) scaleY(1.08); } }
+
+    .machine-caption { font-size: 10px; line-height: 1.25; letter-spacing: .05em; }
+    .spin-row { grid-template-columns: minmax(0, 1fr) 88px; gap: 8px; margin-top: 10px; }
+    .spin-button, .auto-button { min-height: 58px; border-radius: 12px; }
+    .spin-button { gap: 9px; }
+    .spin-glyph { font-size: 27px; }
+    .spin-button strong { font-size: 18px; }
+    .spin-button small { margin-top: 4px; font-size: 12px; }
+    kbd { padding: 4px 6px; font-size: 10px; }
+    .auto-button { gap: 7px; padding: 7px; }
+    .auto-indicator { width: 10px; height: 10px; }
+    .auto-button b { font-size: 11px; }
+    .auto-button small { margin-top: 4px; font-size: 10px; }
+    .result-banner { gap: 9px; min-height: 40px; margin-top: 8px; padding-top: 8px; }
+    .result-icon { width: 28px; height: 28px; border-radius: 8px; font-size: 17px; }
+    .result-banner strong { font-size: 12px; }
+    .result-banner p { max-width: 335px; margin-top: 3px; font-size: 10px; }
+
+    .quick-actions { flex: 0 0 58px; gap: 8px; }
+    .quick-button { gap: 7px; padding: 5px; border-radius: 11px; font-size: 11px; }
+    .quick-icon { width: 27px; height: 27px; border-radius: 8px; font-size: 20px; }
+    .quick-badge { top: 4px; right: 6px; font-size: 10px; }
+    .cabinet-foot { font-size: 9px; }
+    .battle-feedback .feedback-pop { font-size: 28px; }
+    .battle-feedback .feedback-pop.jackpot { font-size: 34px; }
+    .battle-feedback .feedback-pop.enemy-hit { font-size: 23px; }
+
+    /* Sheets retain their compact footprint, but their copy is readable without zooming. */
+    .modal-overlay { padding: 18px; }
+    .modal-card { padding: 22px; border-radius: 18px; }
+    .modal-kicker { margin-bottom: 8px; font-size: 11px; }
+    .modal-heading h2 { font-size: 26px; }
+    .modal-close { width: 38px; height: 38px; font-size: 28px; }
+    .modal-subtitle { margin-top: 10px; font-size: 15px; line-height: 1.4; }
+    .hero-grid { gap: 10px; margin-top: 19px; }
+    .hero-card { grid-template-columns: 53px minmax(0,1fr); gap: 12px; min-height: 78px; padding: 11px; border-radius: 12px; }
+    .hero-portrait { width: 50px; height: 57px; border-radius: 11px; font-size: 29px; }
+    .hero-copy h3 { margin-bottom: 4px; font-size: 16px; }
+    .hero-copy p { font-size: 13px; }
+    .hero-tag { top: 11px; right: 11px; font-size: 10px; }
+    .character-summary { gap: 13px; margin-top: 21px; }
+    .avatar { width: 60px; height: 60px; border-radius: 14px; font-size: 31px; }
+    .character-summary strong { font-size: 19px; }
+    .character-summary p { margin-top: 4px; font-size: 14px; }
+    .modal-stat-line { margin-top: 19px; font-size: 12px; }
+    .modal-meter { margin-top: 19px; }
+    .bar-label { margin-bottom: 6px; font-size: 12px; }
+    .trait-box { margin-top: 19px; padding-top: 16px; }
+    .tag { padding: 5px 8px; font-size: 10px; }
+    .trait-box p { margin-top: 9px; font-size: 14px; line-height: 1.5; }
+    .ability-button { gap: 10px; padding: 12px; margin-top: 17px; border-radius: 11px; }
+    .ability-icon { width: 36px; height: 36px; border-radius: 9px; font-size: 21px; }
+    .ability-button b { font-size: 14px; }
+    .ability-button small { margin-top: 4px; font-size: 12px; }
+    .hero-modal-actions { margin-top: 17px; }
+    .secondary-button { padding: 10px 14px; border-radius: 9px; font-size: 13px; }
+    .sheet-card { max-height: min(82svh, 680px); }
+    .reel-heading { margin-top: 19px; font-size: 14px; }
+    .reel-heading b { font-size: 11px; }
+    .odds-list { gap: 11px; margin-top: 15px; }
+    .odds-row { grid-template-columns: 25px 1fr auto; gap: 9px; font-size: 14px; }
+    .odds-symbol { font-size: 21px; }
+    .odds-row strong { font-size: 12px; }
+    .odds-track { height: 5px; }
+    .microcopy { margin-top: 15px; font-size: 12px; line-height: 1.45; }
+    .combat-log { gap: 10px; margin-top: 21px; }
+    .combat-log li { gap: 9px; font-size: 13px; }
+    .combat-log li::before { font-size: 19px; }
+    .combat-log li .log-time { font-size: 11px; }
+    .jackpot-seal { width: 52px; height: 52px; font-size: 12px; }
+    .upgrade-grid { gap: 10px; margin-top: 19px; }
+    .upgrade-card { grid-template-columns: 47px 1fr; column-gap: 11px; min-height: 76px; padding: 11px; border-radius: 11px; }
+    .upgrade-icon { width: 43px; height: 43px; border-radius: 9px; font-size: 24px; }
+    .upgrade-card h3 { font-size: 15px; }
+    .upgrade-card p { margin-top: 4px; font-size: 12px; line-height: 1.35; }
+    .upgrade-cost { top: 12px; right: 12px; font-size: 10px; }
+    .toast { right: 14px; bottom: max(74px, env(safe-area-inset-bottom)); left: 14px; padding: 11px 14px; border-radius: 10px; font-size: 12px; }
+
+    @media (min-width: 700px) {
+      body { display: grid; place-items: center; }
+      .app-shell { height: 100svh; height: 100dvh; min-height: 0; padding: 14px 0; }
+    }
+    @media (max-height: 620px) {
+      .app-shell { gap: 6px; }
+      .topbar { min-height: 42px; flex-basis: 42px; }
+      .machine-panel { flex-basis: clamp(220px, 43%, 286px); padding: 10px 11px 8px; }
+      .reel-stage { min-height: 78px; margin-top: 6px; margin-bottom: 5px; }
+      .reel-value .symbol-glyph { font-size: 40px; }
+      .reel-value .symbol-name { font-size: 9px; }
+      .spin-row { margin-top: 7px; }
+      .spin-button, .auto-button { min-height: 52px; }
+      .result-banner { min-height: 34px; margin-top: 5px; padding-top: 5px; }
+      .quick-actions { flex-basis: 52px; }
+    }
+    @media (max-width: 350px) {
+      .brand-mark { width: 54px; }
+      .brand-copy h1 { font-size: 21px; }
+      .top-stat:first-child { display: none; }
+      .enemy-hud { width: 92%; }
+      .enemy-hud-heading h2 { font-size: 16px; }
+      .spin-row { grid-template-columns: 1fr 76px; }
+      .quick-button { font-size: 10px; }
+      .quick-icon { width: 24px; height: 24px; }
+    }
+
+    /* v0.5: the cabinet is a touch-first game surface.  This final type-floor rule
+       intentionally supersedes the compact legacy declarations and their media
+       queries above: no visible copy is ever rendered below 16 CSS px (12 pt). */
+    *:not(.sr-only), *:not(.sr-only)::before, *:not(.sr-only)::after { font-size: 16px !important; }
+
+    /* Keep the important hierarchy, while still respecting the 16px minimum. */
+    h1 { font-size: 26px !important; }
+    h2 { font-size: 22px !important; }
+    .brand-mark { font-size: 18px !important; }
+    .brand-mark span:nth-child(2) { font-size: 22px !important; }
+    .brand-copy > span, .top-stat i, .top-stat strong { font-size: 16px !important; }
+    .top-stat strong { font-size: 19px !important; }
+    .icon-button, .modal-close { font-size: 24px !important; }
+    .floating-chip { font-size: 18px !important; }
+    .round-chip { font-size: 24px !important; }
+
+    /* Enemy and player status are intentionally just health bars in the scene. */
+    .enemy-hud { width: min(72%, 340px); padding: 0; border: 0; background: transparent; box-shadow: none; backdrop-filter: none; }
+    .enemy-hud-heading, .enemy-hud .hud-value, .player-hud-heading, .player-hud .hud-value { display: none !important; }
+    .enemy-meter, .player-hud .meter { height: 14px; margin-top: 0; border: 2px solid rgba(5, 9, 25, .72); box-shadow: 0 3px 12px rgba(0, 0, 0, .35); }
+    .player-hud { width: min(180px, 72%); padding: 0; border: 0; background: transparent; backdrop-filter: none; }
+    .battle-callout { display: none; }
+
+    /* Information controls live on the battle scene's left rail, not beneath it. */
+    .quick-actions { position: absolute; z-index: 16; top: 50%; left: 10px; display: flex; flex-direction: column; gap: 12px; width: 52px; transform: translateY(-50%); }
+    .quick-button { display: grid; place-items: center; width: 52px; height: 52px; min-width: 52px; padding: 0; border: 1px solid rgba(218, 231, 255, .32); border-radius: 14px; background: rgba(8, 14, 32, .72); color: var(--muted); cursor: pointer; }
+    .quick-button:hover, .quick-button:focus-visible { border-color: var(--acid); color: var(--text); background: rgba(17, 29, 58, .9); }
+    .quick-icon { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid rgba(217, 255, 104, .42); border-radius: 9px; color: var(--acid); background: rgba(217, 255, 104, .1); font-size: 24px !important; }
+
+    /* Solid continuous drum: the water/submerged illusion comes from shading and
+       scale, never from alpha revealing the battle scene beneath it. */
+    .reel-stage { margin-inline: -2px; background: #0c1630; mask-image: none; }
+    .reel-stage::before { background: linear-gradient(180deg, #080e22 0%, rgba(8, 14, 34, .58) 20%, transparent 36%, transparent 66%, rgba(8, 14, 34, .62) 82%, #080e22 100%), radial-gradient(ellipse 44% 75% at 50% 50%, transparent 0 42%, rgba(4, 9, 24, .42) 82%, rgba(3, 7, 19, .85) 100%); }
+    .reels { mask-image: none; }
+    .reel { background: linear-gradient(180deg, #0d1733 0%, #1b3766 22%, #4075b4 50%, #1b3766 78%, #0d1733 100%) !important; }
+    .reel:nth-child(2) { background: linear-gradient(180deg, #0e1b3d 0%, #27518d 22%, #5b96d6 50%, #27518d 78%, #0e1b3d 100%) !important; }
+    .reel-window { mask-image: none; }
+    .reel::before { background: linear-gradient(180deg, #080e22 0%, rgba(8, 14, 34, .72) 54%, transparent 100%); }
+    .reel::after { background: linear-gradient(0deg, #080e22 0%, rgba(8, 14, 34, .76) 54%, transparent 100%); }
+    .reel + .reel { box-shadow: inset 1px 0 rgba(219, 235, 255, .13); }
+    .payline { right: 0; left: 0; gap: 0; opacity: .58; }
+    .payline i { height: 2px; background: linear-gradient(90deg, transparent, rgba(217, 255, 104, .72), transparent) !important; box-shadow: 0 0 7px rgba(217, 255, 104, .38); }
+    .payline b { display: none !important; }
+    .strip-symbol { font-size: 26px !important; }
+    .reel-value .symbol-glyph { font-size: 52px !important; }
+    .reel-value .symbol-name { font-size: 16px !important; }
+    .lock-badge { font-size: 16px !important; }
+    .reel.spinning .reel-strip { animation: cylinder-roll-fast .13s linear infinite; }
+    .reel.spinning .reel-value { animation: cylinder-value-fast .11s linear infinite; }
+    @keyframes cylinder-roll-fast { from { transform: translateY(-38px) rotateX(-14deg) scaleY(.82); } to { transform: translateY(108px) rotateX(14deg) scaleY(1.1); } }
+    @keyframes cylinder-value-fast { 0%, 100% { transform: translateY(-12px) scaleY(.78); } 50% { transform: translateY(12px) scaleY(1.14); } }
+
+    /* Each stop gets one local snap and one local spark burst. */
+    .reel.locking { animation: reel-lock-snap .34s cubic-bezier(.2, 1.4, .35, 1) both; }
+    @keyframes reel-lock-snap { 0% { transform: translateY(0) scaleY(1); filter: brightness(1); } 34% { transform: translateY(7px) scaleY(.91); filter: brightness(1.55); } 65% { transform: translateY(-4px) scaleY(1.04); filter: brightness(1.2); } 100% { transform: translateY(0) scaleY(1); filter: brightness(1); } }
+    .reel-sparks { position: absolute; z-index: 10; inset: 50%; display: block; width: 0; height: 0; opacity: 0; pointer-events: none; }
+    .reel-sparks i, .reel-sparks b { position: absolute; display: block; width: 4px; height: 16px; border-radius: 999px; background: var(--gold); box-shadow: 0 0 10px var(--gold); transform-origin: 50% 100%; }
+    .reel-sparks i:nth-child(1) { --spark-angle: -78deg; --spark-distance: 32px; }
+    .reel-sparks i:nth-child(2) { --spark-angle: -24deg; --spark-distance: 42px; }
+    .reel-sparks i:nth-child(3) { --spark-angle: 32deg; --spark-distance: 38px; }
+    .reel-sparks i:nth-child(4) { --spark-angle: 82deg; --spark-distance: 28px; }
+    .reel-sparks i { opacity: 0; transform: rotate(var(--spark-angle)) translateY(0); }
+    .reel-sparks b { width: 13px; height: 13px; transform: translate(-50%, -50%) rotate(45deg); }
+    .reel-sparks.burst { opacity: 1; }
+    .reel-sparks.burst i { animation: spark-fly .42s ease-out both; }
+    .reel-sparks.burst b { animation: spark-core .3s ease-out both; }
+    @keyframes spark-fly { 0% { opacity: 0; transform: rotate(var(--spark-angle)) translateY(0) scale(.5); } 18% { opacity: 1; } 100% { opacity: 0; transform: rotate(var(--spark-angle)) translateY(calc(var(--spark-distance) * -1)) scale(.1); } }
+    @keyframes spark-core { 0% { opacity: 0; transform: translate(-50%, -50%) rotate(45deg) scale(.2); } 22% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) rotate(45deg) scale(1.9); } }
+
+    /* The machine action row is 75% ATTACK / 25% dealer SKILL. */
+    .spin-row { grid-template-columns: 3fr 1fr; gap: 10px; }
+    .spin-button, .skill-button { min-height: 64px; touch-action: manipulation; user-select: none; }
+    .spin-button { position: relative; overflow: hidden; }
+    .spin-button strong { font-size: 24px !important; }
+    .spin-button small { font-size: 16px !important; }
+    .spin-button kbd { font-size: 16px !important; }
+    .spin-button.idle-active { border-color: var(--gold); background: linear-gradient(105deg, #c7e95e, #fff0a0); }
+    .hold-progress { position: absolute; right: 0; bottom: 0; left: 0; z-index: 0; width: var(--hold-progress, 0%); height: 7px; background: linear-gradient(90deg, var(--orange), var(--gold)); box-shadow: 0 0 15px var(--gold); pointer-events: none; transition: width .05s linear; }
+    .spin-button > span:not(.hold-progress), .spin-button > kbd { position: relative; z-index: 1; }
+    .skill-button { position: relative; justify-content: center; gap: 4px; min-width: 0; padding: 5px 3px; border-color: rgba(194, 157, 255, .54); background: linear-gradient(145deg, rgba(194, 157, 255, .19), rgba(40, 31, 73, .82)); text-align: center; }
+    .skill-button:disabled { opacity: .6; }
+    .skill-button .ability-icon { width: 30px; height: 30px; font-size: 20px !important; }
+    .skill-copy { min-width: 0; }
+    .skill-copy b { display: block; overflow: hidden; font-size: 16px !important; text-overflow: ellipsis; white-space: nowrap; }
+    .skill-copy small { display: none; }
+    .skill-button .quick-badge { top: 4px; right: 5px; font-size: 16px !important; }
+    .result-banner { min-height: 48px; }
+    .result-icon { font-size: 22px !important; }
+    .result-banner strong, .result-banner p { font-size: 16px !important; }
+    .battle-feedback .feedback-pop { font-size: 30px !important; }
+    .battle-feedback .feedback-pop.jackpot { font-size: 36px !important; }
+
+    /* Modal copy follows the same floor, including dynamically generated cards. */
+    .modal-kicker, .modal-subtitle, .hero-copy h3, .hero-copy p, .hero-tag, .character-summary strong, .character-summary p, .modal-stat-line, .bar-label, .trait-box p, .tag, .ability-button b, .ability-button small, .secondary-button, .reel-heading, .reel-heading b, .odds-row, .odds-row strong, .microcopy, .combat-log li, .combat-log li .log-time, .jackpot-seal, .upgrade-card h3, .upgrade-card p, .upgrade-cost, .toast { font-size: 16px !important; }
+    .modal-heading h2 { font-size: 28px !important; }
+    .modal-close { width: 42px; height: 42px; }
+    .avatar { font-size: 32px !important; }
+    .ability-icon { font-size: 22px !important; }
+    .odds-symbol { font-size: 24px !important; }
+    .upgrade-icon { font-size: 26px !important; }
+
+    /* Short screens hide secondary readouts rather than violating the type floor. */
+    @media (max-height: 620px) {
+      .machine-stats, .machine-caption span:nth-child(2), .result-banner p { display: none; }
+      .machine-panel { flex-basis: clamp(220px, 43%, 286px); }
+      .reel-stage { min-height: 76px; }
+      .reel-value .symbol-glyph { font-size: 44px !important; }
+    }
+    @media (max-width: 350px) {
+      .quick-actions { left: 6px; width: 46px; gap: 9px; }
+      .quick-button { width: 46px; height: 46px; min-width: 46px; }
+      .quick-icon { width: 28px; height: 28px; }
+      .spin-row { grid-template-columns: 3fr 1fr; gap: 7px; }
+      .skill-copy b { font-size: 16px !important; }
+    }
+
+    /* v0.6: keep the enlarged type inside the cabinet on short mobile screens. */
+    .machine-panel {
+      flex: 0 0 clamp(284px, 43%, 340px);
+      min-height: 0;
+      overflow: hidden;
+      padding: 8px 10px 7px;
+    }
+    .machine-topline { flex: 0 0 auto; }
+    .machine-title h2 { margin-top: 2px; font-size: 20px !important; line-height: 1; }
+    .panel-kicker { line-height: 1; }
+    .reel-stage { min-height: 78px; margin-top: 6px; margin-bottom: 4px; }
+    .machine-caption { flex: 0 0 auto; min-height: 18px; font-size: 16px !important; line-height: 1.1; }
+    .spin-row { flex: 0 0 52px; min-height: 52px; height: 52px; margin-top: 6px; gap: 7px; }
+    .spin-button, .skill-button { min-height: 0; height: 52px; max-height: 52px; }
+    .spin-button { padding: 3px 7px; }
+    .spin-button strong { font-size: 20px !important; line-height: 1; }
+    .spin-button small { margin-top: 3px; font-size: 16px !important; line-height: 1; }
+    .spin-button kbd { font-size: 16px !important; }
+    .skill-button { gap: 3px; padding: 3px 2px; }
+    .skill-button .ability-icon { width: 27px; height: 27px; font-size: 18px !important; }
+    .skill-copy b { font-size: 16px !important; line-height: 1; }
+    .skill-button .quick-badge { top: 3px; right: 3px; font-size: 16px !important; }
+    .result-banner { flex: 0 0 40px; min-height: 40px; height: 40px; margin-top: 5px; padding-top: 4px; overflow: hidden; }
+    .result-icon { width: 28px; height: 28px; }
+    .result-banner strong, .result-banner p { font-size: 16px !important; line-height: 1.05; }
+
+    /* The fill and a large percentage label make a hold unmistakable without
+       changing the button's hit target or hiding the attack affordance. */
+    .hold-progress { top: 0; bottom: 0; height: auto; z-index: 0; opacity: .27; border-right: 2px solid rgba(255, 211, 108, .9); transition: width .05s linear; }
+    .spin-button.holding::after { content: attr(data-hold-percent); position: absolute; z-index: 2; inset: 0; display: grid; place-items: center; color: var(--ink); font: 800 20px/1 'DM Mono', monospace; letter-spacing: .04em; text-shadow: 0 1px 0 rgba(255,255,255,.55); pointer-events: none; }
+    .spin-button > span:not(.hold-progress), .spin-button > kbd { z-index: 3; }
+
+    /* The enemy remains a clean health bar in the scene; tapping its art opens the
+       full card, which is kept inside the viewport by the modal sheet constraints. */
+    .enemy-actor { cursor: pointer; }
+    .enemy-actor:focus-visible { outline: 2px solid var(--acid); outline-offset: 5px; border-radius: 14px; }
+    .enemy-info-card { width: min(100%, 420px); max-height: calc(100% - 32px); overflow: auto; padding: 16px; }
+    .enemy-summary { display: flex; align-items: center; gap: 14px; margin-top: 16px; }
+    .enemy-summary strong { display: block; font-size: 20px !important; line-height: 1.1; }
+    .enemy-summary p { margin-top: 6px; color: var(--muted); font-size: 16px !important; line-height: 1.25; }
+    .enemy-modal-art { position: relative; flex: 0 0 74px; width: 74px; height: 74px; filter: drop-shadow(0 8px 7px rgba(5, 9, 25, .45)); }
+    .enemy-modal-art > span { position: absolute; display: block; }
+    .enemy-modal-art .enemy-body { right: 21%; bottom: 10%; left: 21%; height: 55%; border-radius: 45% 45% 35% 40%; background: linear-gradient(140deg, #a7a6bd, #4d4a75 73%); }
+    .enemy-modal-art .enemy-face { top: 18%; right: 28%; left: 28%; height: 34%; border-radius: 50% 50% 43% 43%; background: #bdb5cd; }
+    .enemy-modal-art .enemy-face::before, .enemy-modal-art .enemy-face::after { content: ''; position: absolute; top: -9px; width: 15px; height: 15px; border-radius: 50% 50% 0 50%; background: #8d85aa; }
+    .enemy-modal-art .enemy-face::before { left: -2px; transform: rotate(-23deg); }
+    .enemy-modal-art .enemy-face::after { right: -2px; transform: scaleX(-1) rotate(-23deg); }
+    .enemy-modal-art .enemy-accent { top: 36%; right: 40%; left: 40%; height: 7%; border-radius: 50%; background: #322144; box-shadow: 11px 0 #322144; }
+    .enemy-modal-art.enemy-art-joker .enemy-body { bottom: 9%; height: 63%; border-radius: 46% 46% 24% 24%; background: linear-gradient(140deg, #f2c73f, #a52d59 50%, #27215d); }
+    .enemy-modal-art.enemy-art-joker .enemy-face { background: #f8dac4; }
+    .enemy-modal-art.enemy-art-skull .enemy-body { bottom: 8%; height: 60%; border-radius: 43% 43% 20% 20%; background: linear-gradient(145deg, #bce4e0, #638a9b 74%); }
+    .enemy-modal-art.enemy-art-skull .enemy-face { top: 13%; right: 27%; left: 27%; height: 43%; border-radius: 46% 46% 35% 35%; background: #d7f0e3; }
+    .enemy-modal-art.enemy-art-house .enemy-body { right: 20%; bottom: 7%; left: 20%; height: 68%; border-radius: 40% 40% 20% 20%; background: linear-gradient(145deg, #c99450, #51304e 68%); }
+    .enemy-modal-art.enemy-art-house .enemy-face { top: 7%; right: 26%; left: 26%; height: 43%; background: #e7bd77; }
+    .enemy-info-meter { height: 14px; margin-top: 14px; border: 2px solid rgba(5, 9, 25, .72); }
+    .enemy-info-meter span { background: linear-gradient(90deg, #ff4d76, #ff9d71); box-shadow: 0 0 12px rgba(255, 91, 130, .65); }
+    .enemy-reward-line { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px 18px; margin-top: 16px; color: var(--dim); font-size: 16px !important; line-height: 1.1; }
+    .enemy-reward-line b { color: var(--text); font-size: 16px !important; }
+
+    @media (max-height: 620px) {
+      .machine-panel { flex-basis: 230px; padding-top: 6px; padding-bottom: 5px; }
+      .machine-title, .machine-stats, .machine-caption span:nth-child(2), .result-banner p { display: none; }
+      .machine-topline { min-height: 0; }
+      .reel-stage { min-height: 72px; margin-top: 4px; margin-bottom: 3px; }
+      .spin-row { flex-basis: 50px; height: 50px; min-height: 50px; margin-top: 4px; }
+      .spin-button, .skill-button { height: 50px; max-height: 50px; }
+      .result-banner { flex-basis: 34px; height: 34px; min-height: 34px; margin-top: 3px; }
+      .result-icon { width: 24px; height: 24px; }
+    }
+kind: ConfigMap
+metadata:
+  name: critical-spin
+  namespace: agents
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: critical-spin
+  namespace: agents
+  labels:
+    app.kubernetes.io/name: critical-spin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: critical-spin
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: critical-spin
+    spec:
+      containers:
+        - name: web
+          image: nginx:alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          volumeMounts:
+            - name: web-assets
+              mountPath: /usr/share/nginx/html
+              readOnly: true
+      volumes:
+        - name: web-assets
+          configMap:
+            name: critical-spin
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: critical-spin
+  namespace: agents
+  labels:
+    app.kubernetes.io/name: critical-spin
+spec:
+  selector:
+    app.kubernetes.io/name: critical-spin
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: critical-spin
+  namespace: agents
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-production
+spec:
+  ingressClassName: internal
+  tls:
+    - hosts:
+        - critical-spin.example.com
+      secretName: critical-spin-tls
+  rules:
+    - host: critical-spin.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: critical-spin
+                port:
+                  name: http

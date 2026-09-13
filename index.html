@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#070a16">
+  <meta name="description" content="Critical Spin — a gambling RPG where your build is the machine.">
+  <title>Critical Spin · GRPG</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <main class="app-shell" aria-label="Critical Spin slot machine game">
+    <header class="topbar">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true"><span>7</span><span>♠</span><span>7</span></div>
+        <div class="brand-copy"><h1>Critical <em>Spin</em></h1><span>GRPG · TABLE <b id="encounterNumber">01</b>/04</span></div>
+      </div>
+      <div class="top-stats" aria-label="Run summary">
+        <span class="top-stat"><i>RUN</i><strong id="runNumber">01</strong></span>
+        <span class="top-stat gold"><i>GOLD</i><strong id="goldValue">120</strong></span>
+        <button class="icon-button" id="resetButton" type="button" aria-label="Start a fresh run" title="New run">↻</button>
+      </div>
+    </header>
+
+    <section class="game-cabinet" aria-label="Slot machine game cabinet">
+      <section class="game-stage" aria-label="Battle scene">
+        <section class="scene-viewport" id="sceneViewport" aria-labelledby="encounterTitle">
+          <div class="scene-backdrop" aria-hidden="true">
+            <div class="moon"></div><div class="mountain mountain-back"></div><div class="mountain mountain-front"></div>
+            <div class="casino-arch arch-left"><span></span></div><div class="casino-arch arch-right"><span></span></div><div class="horizon-glow"></div>
+            <div class="battle-lane"><i></i><i></i><i></i></div>
+            <div class="floating-chip chip-one">7</div><div class="floating-chip chip-two">♣</div><div class="floating-chip chip-three">♦</div>
+          </div>
+
+          <div class="scene-ui scene-ui-top">
+            <div class="enemy-hud" aria-label="Enemy status">
+              <div class="enemy-hud-heading"><span class="scene-level" id="enemyLevel">LVL 1</span><h2 id="enemyName">The Velvet Rat</h2><span class="enemy-status" id="enemyStatus">WATCHFUL</span></div>
+              <div class="meter enemy-meter" aria-label="Enemy vitality"><span id="enemyHpBar"></span></div>
+              <span class="hud-value" id="enemyHpText">160 / 160</span>
+            </div>
+            <div class="scene-actions"><span class="round-chip" id="enemyMood" aria-label="Enemy mood">♠</span></div>
+          </div>
+          <nav class="quick-actions" aria-label="Game information">
+            <button class="quick-button" id="characterInfoButton" type="button" aria-haspopup="dialog" aria-controls="characterInfoModal" aria-label="Open dealer information" title="Dealer information"><span class="quick-icon" id="playerAvatar" aria-hidden="true">♠</span><span class="sr-only">Dealer</span></button>
+            <button class="quick-button" id="oddsButton" type="button" aria-haspopup="dialog" aria-controls="oddsModal" aria-label="Open loaded odds" title="Loaded odds"><span class="quick-icon" aria-hidden="true">♣</span><span class="sr-only">Odds</span></button>
+            <button class="quick-button" id="logButton" type="button" aria-haspopup="dialog" aria-controls="logModal" aria-label="Open pull history" title="Pull history"><span class="quick-icon" aria-hidden="true">≋</span><span class="sr-only">History</span></button>
+          </nav>
+          <span class="sr-only" id="encounterTitle">The Velvet Rat</span><span class="sr-only" id="encounterType">ANTE ROOM</span><span class="sr-only" id="enemyFlavor"></span><span class="sr-only" id="enemyReward"></span><span class="sr-only" id="enemyDrop"></span>
+
+          <div class="enemy-actor" id="enemyActor" role="button" tabindex="0" aria-haspopup="dialog" aria-controls="enemyInfoModal" aria-label="Open enemy information">
+            <div class="enemy-aura" aria-hidden="true"></div>
+            <div class="enemy-art enemy-art-rat" id="enemyArt" role="img" aria-label="The Velvet Rat"><span class="enemy-shadow"></span><span class="enemy-body"></span><span class="enemy-face"></span><span class="enemy-accent"></span></div>
+          </div>
+
+          <div class="battle-feedback" id="battleFeedback" aria-live="polite"></div>
+          <div class="battle-callout" id="battleCallout"><span class="callout-icon">✦</span><span><b>THE TABLE IS OPEN</b><small>Hold reels, then pull.</small></span></div>
+
+          <div class="player-actor" id="playerActor">
+            <div class="player-glow" aria-hidden="true"></div><div class="player-shadow" aria-hidden="true"></div>
+            <div class="player-sprite hero-housebreaker" id="playerSprite" role="img" aria-label="The Housebreaker seen from behind"><span class="sprite-cape"></span><span class="sprite-body"></span><span class="sprite-head"></span><span class="sprite-weapon"></span><span class="sprite-glint"></span></div>
+            <div class="player-hud" aria-label="Player status"><div class="player-hud-heading"><span id="playerSceneName">The Housebreaker</span><span id="playerSceneClass">Risk runner · Level 1</span></div><div class="meter hp-meter" aria-label="Player vitality"><span id="playerHpBar"></span></div><span class="hud-value" id="playerHpText">100 / 100</span></div>
+          </div>
+        </section>
+      </section>
+
+      <section class="machine-panel" aria-labelledby="machineHeading">
+        <div class="machine-topline"><div class="machine-title"><span class="panel-kicker"><span class="live-dot"></span> LIVE TABLE</span><h2 id="machineHeading">Your reels</h2></div><div class="machine-stats" aria-label="Spin stats"><span><b id="streakValue">0</b><small>STREAK <i id="streakPips" aria-hidden="true"></i></small></span><span><b id="spinCount">SPINS 0</b><small>RUN</small></span></div></div>
+        <div class="reel-stage" id="reelStage"><div class="reel-shine" aria-hidden="true"></div><div class="payline" aria-hidden="true"><i></i><i></i></div><div class="reels" id="reels" role="list" aria-label="Three combat reels"></div></div>
+        <div class="machine-caption"><span id="pullCost">FREE PULL</span><span>Tap reel to hold</span><span id="spinCaption">ODDS LOADED</span></div>
+        <div class="spin-row"><button class="spin-button" id="spinButton" type="button" aria-label="Attack. Hold for 2 seconds to toggle idle mode"><span class="hold-progress" aria-hidden="true"></span><span class="spin-glyph" aria-hidden="true">⚔</span><span><strong>ATTACK</strong><small id="spinButtonHint">HOLD 2s: IDLE</small></span><kbd>ENTER</kbd></button><button class="ability-button skill-button" id="abilityButton" type="button" disabled aria-label="Use dealer skill"><span class="ability-icon" id="abilityIcon" aria-hidden="true">♜</span><span class="skill-copy"><b id="abilityName">SKILL</b><small id="abilityHintText">CHARGE 0%</small></span><span class="quick-badge" id="chargeText">0%</span></button></div>
+        <div class="result-banner" id="resultBanner" role="status" aria-live="polite"><span class="result-icon" id="resultIcon">✦</span><div><strong id="resultTitle">The table is waiting.</strong><p id="resultDetail">Pull the lever.</p></div></div>
+      </section>
+    </section>
+
+    <p class="cabinet-foot"><span>GRPG · Gambling RPG</span><span>Critical Spin <i>v0.6</i></span><span class="sr-only">Best table: <b id="bestValue">0</b></span></p>
+  </main>
+
+  <section class="modal-overlay hero-modal" id="heroPicker" role="dialog" aria-modal="true" aria-labelledby="heroPickerTitle" hidden>
+    <div class="modal-card hero-modal-card"><div class="modal-heading"><div><span class="modal-kicker">CHOOSE YOUR DEALER</span><h2 id="heroPickerTitle">Pick your machine.</h2></div><button class="modal-close" type="button" data-close-modal="heroPicker" aria-label="Close dealer selection">×</button></div><p class="modal-subtitle">Each dealer loads a different set of odds.</p><div class="hero-grid" id="heroGrid" role="list" aria-label="Choose a character"></div></div>
+  </section>
+
+  <section class="modal-overlay" id="characterInfoModal" role="dialog" aria-modal="true" aria-labelledby="characterInfoTitle" hidden>
+    <div class="modal-card"><div class="modal-heading"><div><span class="modal-kicker">DEALER CARD</span><h2 id="characterInfoTitle">Your dealer</h2></div><button class="modal-close" type="button" data-close-modal="characterInfoModal" aria-label="Close dealer card">×</button></div><div class="character-summary"><div class="avatar" id="modalPlayerAvatar" aria-hidden="true">♠</div><div><strong id="modalPlayerName">The Housebreaker</strong><p id="modalPlayerClass">Risk runner · Level 1</p></div></div><div class="modal-stat-line"><span>VITALITY <b id="modalPlayerHp">100 / 100</b></span><span>LUCK <b id="luckValue">12%</b></span></div><div class="modal-meter"><div class="bar-label"><span>ABILITY CHARGE</span><strong id="modalChargeText">0 / 100</strong></div><div class="meter charge-meter"><span id="modalChargeBar"></span></div></div><div class="trait-box"><span class="tag tag-gold">TRAIT</span><p id="traitText">Loaded Dice — every WILD has a 20% chance to become a SEVEN.</p></div><button class="ability-button modal-ability" id="modalAbilityButton" type="button" disabled><span class="ability-icon" id="modalAbilityIcon">♜</span><span><b id="modalAbilityName">House Edge</b><small id="modalAbilityHint">Charge it up by spinning</small></span></button><div class="hero-modal-actions"><button class="secondary-button" id="changeDealerButton" type="button">Change dealer</button></div><span class="sr-only" id="playerHeading"></span><span class="sr-only" id="playerClass"></span><span class="sr-only" id="abilityHint"></span><span class="sr-only meter" id="chargeBar"></span></div>
+  </section>
+
+  <section class="modal-overlay" id="enemyInfoModal" role="dialog" aria-modal="true" aria-labelledby="enemyInfoTitle" hidden>
+    <div class="modal-card enemy-info-card"><div class="modal-heading"><div><span class="modal-kicker">ENCOUNTER CARD</span><h2 id="enemyInfoTitle">The Velvet Rat</h2></div><button class="modal-close" type="button" data-close-modal="enemyInfoModal" aria-label="Close enemy information">×</button></div><div class="enemy-summary"><div class="enemy-modal-art enemy-art-rat" id="enemyModalArt" aria-hidden="true"><span class="enemy-body"></span><span class="enemy-face"></span><span class="enemy-accent"></span></div><div><strong id="enemyInfoName">The Velvet Rat</strong><p id="enemyInfoFlavor">A small-time cheat with a very large appetite.</p></div></div><div class="modal-stat-line"><span>VITALITY <b id="enemyInfoHp">160 / 160</b></span><span id="enemyInfoStatus">WATCHFUL</span></div><div class="meter enemy-info-meter"><span id="enemyInfoHpBar"></span></div><div class="enemy-reward-line"><span>BOUNTY <b id="enemyInfoReward">+35g</b></span><span>DROP <b id="enemyInfoDrop">CLOVER DUST</b></span></div></div>
+  </section>
+
+  <section class="modal-overlay" id="oddsModal" role="dialog" aria-modal="true" aria-labelledby="oddsTitle" hidden>
+    <div class="modal-card sheet-card"><div class="modal-heading"><div><span class="modal-kicker">MACHINE READOUT</span><h2 id="oddsTitle">Loaded odds</h2></div><button class="modal-close" type="button" data-close-modal="oddsModal" aria-label="Close odds">×</button></div><div class="reel-heading"><span>Current loadout</span><b id="reelPower">POWER +0</b></div><div class="odds-list" id="oddsList"></div><p class="microcopy">Upgrade between tables to tune the machine.</p></div>
+  </section>
+
+  <section class="modal-overlay" id="logModal" role="dialog" aria-modal="true" aria-labelledby="logTitle" hidden>
+    <div class="modal-card sheet-card"><div class="modal-heading"><div><span class="modal-kicker">TABLE TALK</span><h2 id="logTitle">Recent pulls</h2></div><button class="modal-close" type="button" data-close-modal="logModal" aria-label="Close history">×</button></div><ol class="combat-log" id="combatLog" aria-live="polite"></ol></div>
+  </section>
+
+  <section class="modal-overlay reward-panel hidden" id="rewardPanel" role="dialog" aria-modal="true" aria-labelledby="rewardHeading">
+    <div class="modal-card reward-card"><div class="modal-heading"><div><span class="modal-kicker">THE HOUSE PAYS</span><h2 id="rewardHeading">Choose an upgrade.</h2></div><span class="jackpot-seal" aria-hidden="true">WIN</span></div><p class="modal-subtitle" id="rewardFlavor">Tune the machine for the next table.</p><div class="upgrade-grid" id="upgradeGrid"></div></div>
+  </section>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="game.js"></script>
+</body>
+</html>
